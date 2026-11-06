@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = ">= 3.1"
 
   spec.files = Dir["lib/**/*.rb"] + Dir["data/*.yml"] + Dir["exe/*"] +
-               %w[LICENSE ATTRIBUTION.md].select { |path| File.exist?(path) }
+               %w[README.md LICENSE ATTRIBUTION.md].select { |path| File.exist?(path) }
   spec.bindir = "exe"
   spec.executables = ["cvt"]
   spec.require_paths = ["lib"]
