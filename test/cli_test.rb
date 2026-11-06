@@ -65,6 +65,12 @@ class CliTest < Minitest::Test
     Open3.capture3(RbConfig.ruby, EXE, *args)
   end
 
+  # libvips reports missing optional modules straight to fd 2; those GLib
+  # warnings are engine diagnostics, not CVT output.
+  def clean_stderr(stderr)
+    stderr.lines.reject { |line| line.match?(/\(process:\d+\): .*-WARNING \*\*:/) }.join.strip
+  end
+
   def run_cli(args, pool: Cvt::Backends)
     out = StringIO.new
     err = StringIO.new
@@ -89,14 +95,14 @@ class CliTest < Minitest::Test
     assert_includes stdout, "Usage: cvt SOURCE TARGET"
     assert_includes stdout, "--quality"
     refute stdout.start_with?("ok:")
-    assert_equal "", stderr
+    assert_equal "", clean_stderr(stderr)
   end
 
   def test_no_arguments_prints_help_and_exits_two
     stdout, stderr, status = run_exe
     assert_equal 2, status.exitstatus
     assert_includes stdout, "Usage:"
-    assert_equal "", stderr
+    assert_equal "", clean_stderr(stderr)
   end
 
   def test_version_yaml
@@ -108,7 +114,7 @@ class CliTest < Minitest::Test
     assert_equal "version", document["operation"]
     assert_equal RUBY_VERSION, document["ruby"]
     refute_nil document["platform"]
-    assert_equal "", stderr
+    assert_equal "", clean_stderr(stderr)
   end
 
   def test_formats_lists_all_56_without_adapters
@@ -129,7 +135,7 @@ class CliTest < Minitest::Test
     svg = document["formats"].find { |entry| entry["id"] == "svg" }
     assert_equal true, svg["read"]
     assert_equal false, svg["write"]
-    assert_equal "", stderr
+    assert_equal "", clean_stderr(stderr)
   end
 
   def test_formats_format_detail_resolves_alias
@@ -180,7 +186,7 @@ class CliTest < Minitest::Test
       refute_nil entry["reads"]
       refute_nil entry["writes"]
     end
-    assert_equal "", stderr
+    assert_equal "", clean_stderr(stderr)
   end
 
   def test_backends_available_filter
@@ -206,7 +212,7 @@ class CliTest < Minitest::Test
     refute_nil marcel, "marcel must be reported as a native dependency"
     assert_equal true, marcel["available"]
     refute_nil marcel["version"]
-    assert_equal "", stderr
+    assert_equal "", clean_stderr(stderr)
   end
 
   def test_unknown_option_is_a_usage_error_yaml
@@ -215,7 +221,7 @@ class CliTest < Minitest::Test
     document = parse_yaml(stdout)
     assert_equal "usage_error", document["error"]["code"]
     assert_includes document["error"]["hint"], "--help"
-    assert_equal "", stderr
+    assert_equal "", clean_stderr(stderr)
   end
 
   def test_information_options_cannot_mix_with_conversion_arguments
@@ -287,7 +293,7 @@ class CliTest < Minitest::Test
       assert_equal "json", document["output"]["format"]
       assert_equal [{ "backend" => "native_data", "from" => "csv", "to" => "json" }],
                    document["route"]
-      assert_equal "", stderr
+      assert_equal "", clean_stderr(stderr)
       assert File.exist?(target)
 
       code, output, = run_cli([source, target, "--force", "--quiet"],
