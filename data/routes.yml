@@ -1,0 +1,281 @@
+# Declarative backend and route registry. Format groups are expanded by
+# Cvt::Registry; an edge may use a format ID or a group name for from/to.
+# Lower priority numbers are preferred. requirements lists route-level
+# external binaries (missing ones only disable that route, not the backend).
+groups:
+  vips_raster: [png, jpg, webp, tiff, avif, heic]
+  lossy_raster: [jpg, webp, avif, heic]
+  lossless_raster: [png, tiff]
+  magick_raster: [png, jpg, webp, gif, bmp, tiff, ico, avif, heic, pnm, tga]
+  magick_lossless: [png, gif, bmp, tiff, ico, pnm, tga]
+  data_text: [csv, tsv, json, jsonl, yaml, xml, toml]
+  spreadsheet_readable: [xlsx, ods]
+  office_inputs: [docx, odt, rtf, html, txt, xlsx, ods]
+  office_outputs: [html, txt, docx, odt, rtf, xlsx, ods]
+  pandoc_docs: [md, html, docx, odt, rst, tex, epub]
+  ebooks: [epub, mobi, azw3]
+  audio: [mp3, wav, flac, ogg, opus, aac, m4a, aiff]
+  video: [mp4, mkv, webm, mov, avi, m4v]
+  archives: [zip, tar, tgz]
+  subtitles: [srt, vtt, ass]
+
+backends:
+  native_data:
+    kind: native
+  native_text:
+    kind: native
+  native_archive:
+    kind: native+cli
+  native_subtitle:
+    kind: native
+  spreadsheet:
+    kind: gem
+  vips:
+    kind: gem
+  imagemagick:
+    kind: gem+cli
+  rsvg:
+    kind: cli
+  pdf:
+    kind: native+cli
+  ffmpeg:
+    kind: cli
+  pandoc:
+    kind: cli
+  libreoffice:
+    kind: cli
+  calibre:
+    kind: cli
+
+routes:
+  # Data formats (native table/tree mapping)
+  - backend: native_data
+    from: data_text
+    to: data_text
+    priority: 5
+    lossy: false
+    requirements: []
+
+  # Spreadsheet reading and XLSX writing
+  - backend: spreadsheet
+    from: spreadsheet_readable
+    to: data_text
+    priority: 8
+    lossy: false
+    requirements: []
+  - backend: spreadsheet
+    from: spreadsheet_readable
+    to: xlsx
+    priority: 8
+    lossy: false
+    requirements: []
+  - backend: spreadsheet
+    from: data_text
+    to: xlsx
+    priority: 8
+    lossy: false
+    requirements: []
+
+  # Images (preferred libvips, ImageMagick fallback)
+  - backend: vips
+    from: vips_raster
+    to: lossy_raster
+    priority: 10
+    lossy: true
+    requirements: []
+  - backend: vips
+    from: vips_raster
+    to: lossless_raster
+    priority: 10
+    lossy: false
+    requirements: []
+  - backend: imagemagick
+    from: magick_raster
+    to: lossy_raster
+    priority: 20
+    lossy: true
+    requirements: []
+  - backend: imagemagick
+    from: magick_raster
+    to: magick_lossless
+    priority: 20
+    lossy: false
+    requirements: []
+  - backend: imagemagick
+    from: svg
+    to: png
+    priority: 25
+    lossy: false
+    requirements: []
+  - backend: rsvg
+    from: svg
+    to: [png, pdf]
+    priority: 15
+    lossy: false
+    requirements: []
+  - backend: pdf
+    from: [png, jpg]
+    to: pdf
+    priority: 10
+    lossy: false
+    requirements: []
+  - backend: pdf
+    from: pdf
+    to: [png, jpg]
+    priority: 10
+    lossy: true
+    requirements: []
+  - backend: pdf
+    from: pdf
+    to: txt
+    priority: 10
+    lossy: true
+    requirements: []
+  - backend: vips
+    from: pdf
+    to: [png, jpg]
+    priority: 30
+    lossy: true
+    requirements: []
+
+  # Media
+  - backend: ffmpeg
+    from: audio
+    to: audio
+    priority: 10
+    lossy: true
+    requirements: []
+  - backend: ffmpeg
+    from: video
+    to: video
+    priority: 10
+    lossy: true
+    requirements: []
+  - backend: ffmpeg
+    from: video
+    to: audio
+    priority: 10
+    lossy: true
+    requirements: []
+  - backend: ffmpeg
+    from: video
+    to: gif
+    priority: 10
+    lossy: true
+    requirements: []
+
+  # Native text conversions
+  - backend: native_text
+    from: md
+    to: html
+    priority: 5
+    lossy: false
+    requirements: []
+  - backend: native_text
+    from: md
+    to: txt
+    priority: 5
+    lossy: true
+    requirements: []
+  - backend: native_text
+    from: txt
+    to: [md, html]
+    priority: 5
+    lossy: false
+    requirements: []
+  - backend: native_text
+    from: html
+    to: txt
+    priority: 5
+    lossy: true
+    requirements: []
+
+  # Documents and ebooks
+  - backend: pandoc
+    from: pandoc_docs
+    to: pandoc_docs
+    priority: 12
+    lossy: true
+    requirements: []
+  - backend: libreoffice
+    from: office_inputs
+    to: pdf
+    priority: 15
+    lossy: false
+    requirements: []
+  - backend: libreoffice
+    from: office_inputs
+    to: office_outputs
+    priority: 15
+    lossy: true
+    requirements: []
+  - backend: libreoffice
+    from: csv
+    to: [xlsx, ods]
+    priority: 40
+    lossy: true
+    requirements: []
+  - backend: calibre
+    from: ebooks
+    to: ebooks
+    priority: 12
+    lossy: true
+    requirements: []
+  - backend: calibre
+    from: ebooks
+    to: pdf
+    priority: 12
+    lossy: true
+    requirements: []
+
+  # Archives: repackable containers and single-stream compressors
+  - backend: native_archive
+    from: archives
+    to: archives
+    priority: 5
+    lossy: false
+    requirements: []
+  - backend: native_archive
+    from: gz
+    to: xz
+    priority: 5
+    lossy: false
+    requirements: [xz]
+  - backend: native_archive
+    from: gz
+    to: bz2
+    priority: 5
+    lossy: false
+    requirements: [bzip2]
+  - backend: native_archive
+    from: xz
+    to: gz
+    priority: 5
+    lossy: false
+    requirements: [xz]
+  - backend: native_archive
+    from: xz
+    to: bz2
+    priority: 5
+    lossy: false
+    requirements: [xz, bzip2]
+  - backend: native_archive
+    from: bz2
+    to: gz
+    priority: 5
+    lossy: false
+    requirements: [bzip2]
+  - backend: native_archive
+    from: bz2
+    to: xz
+    priority: 5
+    lossy: false
+    requirements: [bzip2, xz]
+
+  # Subtitles
+  - backend: native_subtitle
+    from: subtitles
+    to: subtitles
+    priority: 5
+    lossy: false
+    requirements: []

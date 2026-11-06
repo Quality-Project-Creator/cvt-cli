@@ -1,0 +1,409 @@
+# Canonical format registry. This file is the single source of truth for
+# format IDs, extensions, MIME types, aliases, and declared read/write support.
+# External engine availability is reported separately at runtime.
+formats:
+  # image (12)
+  png:
+    category: image
+    extensions: [png]
+    mime: image/png
+    read: true
+    write: true
+    aliases: []
+  jpg:
+    category: image
+    extensions: [jpg, jpeg, jpe, jfif]
+    mime: image/jpeg
+    read: true
+    write: true
+    aliases: [jpeg, jpe, jfif]
+  webp:
+    category: image
+    extensions: [webp]
+    mime: image/webp
+    read: true
+    write: true
+    aliases: []
+  gif:
+    category: image
+    extensions: [gif]
+    mime: image/gif
+    read: true
+    write: true
+    aliases: []
+  bmp:
+    category: image
+    extensions: [bmp]
+    mime: image/bmp
+    read: true
+    write: true
+    aliases: []
+  tiff:
+    category: image
+    extensions: [tiff, tif]
+    mime: image/tiff
+    read: true
+    write: true
+    aliases: [tif]
+  ico:
+    category: image
+    extensions: [ico]
+    mime: image/vnd.microsoft.icon
+    read: true
+    write: true
+    aliases: []
+  svg:
+    category: image
+    extensions: [svg]
+    mime: image/svg+xml
+    read: true
+    write: false
+    aliases: []
+  avif:
+    category: image
+    extensions: [avif]
+    mime: image/avif
+    read: true
+    write: true
+    aliases: []
+  heic:
+    category: image
+    extensions: [heic]
+    mime: image/heic
+    read: true
+    write: true
+    aliases: []
+  pnm:
+    category: image
+    extensions: [pnm, ppm, pgm, pbm]
+    mime: image/x-portable-anymap
+    read: true
+    write: true
+    aliases: [ppm, pgm, pbm]
+  tga:
+    category: image
+    extensions: [tga]
+    mime: image/x-tga
+    read: true
+    write: true
+    aliases: []
+
+  # audio (8)
+  mp3:
+    category: audio
+    extensions: [mp3]
+    mime: audio/mpeg
+    read: true
+    write: true
+    aliases: []
+  wav:
+    category: audio
+    extensions: [wav]
+    mime: audio/wav
+    read: true
+    write: true
+    aliases: []
+  flac:
+    category: audio
+    extensions: [flac]
+    mime: audio/flac
+    read: true
+    write: true
+    aliases: []
+  ogg:
+    category: audio
+    extensions: [ogg]
+    mime: audio/ogg
+    read: true
+    write: true
+    aliases: []
+  opus:
+    category: audio
+    extensions: [opus]
+    mime: audio/opus
+    read: true
+    write: true
+    aliases: []
+  aac:
+    category: audio
+    extensions: [aac]
+    mime: audio/aac
+    read: true
+    write: true
+    aliases: []
+  m4a:
+    category: audio
+    extensions: [m4a]
+    mime: audio/mp4
+    read: true
+    write: true
+    aliases: []
+  aiff:
+    category: audio
+    extensions: [aiff, aif]
+    mime: audio/aiff
+    read: true
+    write: true
+    aliases: []
+
+  # video (6)
+  mp4:
+    category: video
+    extensions: [mp4]
+    mime: video/mp4
+    read: true
+    write: true
+    aliases: []
+  mkv:
+    category: video
+    extensions: [mkv]
+    mime: video/x-matroska
+    read: true
+    write: true
+    aliases: []
+  webm:
+    category: video
+    extensions: [webm]
+    mime: video/webm
+    read: true
+    write: true
+    aliases: []
+  mov:
+    category: video
+    extensions: [mov]
+    mime: video/quicktime
+    read: true
+    write: true
+    aliases: []
+  avi:
+    category: video
+    extensions: [avi]
+    mime: video/x-msvideo
+    read: true
+    write: true
+    aliases: []
+  m4v:
+    category: video
+    extensions: [m4v]
+    mime: video/x-m4v
+    read: true
+    write: true
+    aliases: []
+
+  # document (12)
+  txt:
+    category: document
+    extensions: [txt]
+    mime: text/plain
+    read: true
+    write: true
+    aliases: [text]
+  md:
+    category: document
+    extensions: [md]
+    mime: text/markdown
+    read: true
+    write: true
+    aliases: [markdown, mdown, mkd]
+  html:
+    category: document
+    extensions: [html]
+    mime: text/html
+    read: true
+    write: true
+    aliases: [htm, xhtml]
+  pdf:
+    category: document
+    extensions: [pdf]
+    mime: application/pdf
+    read: true
+    write: true
+    aliases: []
+  docx:
+    category: document
+    extensions: [docx]
+    mime: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+    read: true
+    write: true
+    aliases: []
+  odt:
+    category: document
+    extensions: [odt]
+    mime: application/vnd.oasis.opendocument.text
+    read: true
+    write: true
+    aliases: []
+  rtf:
+    category: document
+    extensions: [rtf]
+    mime: application/rtf
+    read: true
+    write: true
+    aliases: []
+  epub:
+    category: document
+    extensions: [epub]
+    mime: application/epub+zip
+    read: true
+    write: true
+    aliases: []
+  mobi:
+    category: document
+    extensions: [mobi]
+    mime: application/x-mobipocket-ebook
+    read: true
+    write: true
+    aliases: []
+  azw3:
+    category: document
+    extensions: [azw3]
+    mime: application/vnd.amazon.ebook
+    read: true
+    write: true
+    aliases: []
+  rst:
+    category: document
+    extensions: [rst]
+    mime: text/x-rst
+    read: true
+    write: true
+    aliases: []
+  tex:
+    category: document
+    extensions: [tex]
+    mime: text/x-tex
+    read: true
+    write: true
+    aliases: []
+
+  # data (9)
+  csv:
+    category: data
+    extensions: [csv]
+    mime: text/csv
+    read: true
+    write: true
+    aliases: []
+  tsv:
+    category: data
+    extensions: [tsv]
+    mime: text/tab-separated-values
+    read: true
+    write: true
+    aliases: []
+  json:
+    category: data
+    extensions: [json]
+    mime: application/json
+    read: true
+    write: true
+    aliases: []
+  jsonl:
+    category: data
+    extensions: [jsonl]
+    mime: application/x-ndjson
+    read: true
+    write: true
+    aliases: [ndjson, jsonlines]
+  yaml:
+    category: data
+    extensions: [yaml]
+    mime: application/yaml
+    read: true
+    write: true
+    aliases: [yml]
+  xml:
+    category: data
+    extensions: [xml]
+    mime: application/xml
+    read: true
+    write: true
+    aliases: []
+  toml:
+    category: data
+    extensions: [toml]
+    mime: application/toml
+    read: true
+    write: true
+    aliases: []
+  xlsx:
+    category: data
+    extensions: [xlsx]
+    mime: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    read: true
+    write: true
+    aliases: []
+  ods:
+    category: data
+    extensions: [ods]
+    mime: application/vnd.oasis.opendocument.spreadsheet
+    read: true
+    write: true
+    aliases: []
+
+  # archive (6)
+  zip:
+    category: archive
+    extensions: [zip]
+    mime: application/zip
+    read: true
+    write: true
+    aliases: []
+  tar:
+    category: archive
+    extensions: [tar]
+    mime: application/x-tar
+    read: true
+    write: true
+    aliases: []
+  tgz:
+    category: archive
+    extensions: [tgz, tar.gz]
+    mime: application/gzip
+    read: true
+    write: true
+    aliases: [".tar.gz"]
+  gz:
+    category: archive
+    extensions: [gz]
+    mime: application/gzip
+    read: true
+    write: true
+    aliases: []
+  xz:
+    category: archive
+    extensions: [xz]
+    mime: application/x-xz
+    read: true
+    write: true
+    aliases: []
+  bz2:
+    category: archive
+    extensions: [bz2]
+    mime: application/x-bzip2
+    read: true
+    write: true
+    aliases: []
+
+  # subtitle (3)
+  srt:
+    category: subtitle
+    extensions: [srt]
+    mime: application/x-subrip
+    read: true
+    write: true
+    aliases: [subrip]
+  vtt:
+    category: subtitle
+    extensions: [vtt]
+    mime: text/vtt
+    read: true
+    write: true
+    aliases: [webvtt]
+  ass:
+    category: subtitle
+    extensions: [ass]
+    mime: text/x-ass
+    read: true
+    write: true
+    aliases: [ssa]

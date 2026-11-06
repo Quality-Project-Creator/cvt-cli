@@ -1,0 +1,17 @@
+# Build artifacts
+*.gem
+pkg/
+coverage/
+tmp/
+
+# Bundler
+.bundle/
+vendor/bundle/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+*.log

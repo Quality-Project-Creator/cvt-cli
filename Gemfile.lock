@@ -1,0 +1,93 @@
+PATH
+  remote: .
+  specs:
+    cvt-cli (0.0.1.pre.beta)
+      caxlsx (>= 4.1)
+      kramdown (>= 2.4)
+      marcel (~> 1.0)
+      mini_magick (>= 4.12)
+      nokogiri (>= 1.15)
+      pdf-reader (>= 2.12)
+      prawn (>= 2.4)
+      roo (>= 2.10)
+      ruby-vips (~> 2.1)
+      rubyzip (>= 2.3)
+      srt (>= 0.1)
+      toml-rb (>= 2.2)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    Ascii85 (2.0.1)
+    afm (1.0.1)
+    base64 (0.2.0)
+    bigdecimal (3.1.8)
+    caxlsx (4.5.0)
+      htmlentities (~> 4.3, >= 4.3.4)
+      marcel (~> 1.0)
+      nokogiri (~> 1.10, >= 1.10.4)
+      rubyzip (>= 2.4, < 4)
+    csv (3.3.2)
+    ffi (1.17.4-arm64-darwin)
+    ffi (1.17.4-x64-mingw-ucrt)
+    ffi (1.17.4-x86_64-darwin)
+    ffi (1.17.4-x86_64-linux-gnu)
+    hashery (2.1.2)
+    htmlentities (4.4.2)
+    kramdown (2.5.2)
+      rexml (>= 3.4.4)
+    logger (1.6.4)
+    marcel (1.2.1)
+    matrix (0.4.2)
+    mini_magick (5.4.0)
+      logger
+    minitest (5.25.4)
+    nokogiri (1.19.4-arm64-darwin)
+      racc (~> 1.4)
+    nokogiri (1.19.4-x64-mingw-ucrt)
+      racc (~> 1.4)
+    nokogiri (1.19.4-x86_64-darwin)
+      racc (~> 1.4)
+    nokogiri (1.19.4-x86_64-linux-gnu)
+      racc (~> 1.4)
+    pdf-core (0.10.0)
+    pdf-reader (2.16.0)
+      Ascii85 (>= 1.0, < 3.0, != 2.0.0)
+      afm (>= 0.2.1, < 2)
+      hashery (~> 2.0)
+      ttfunk
+    prawn (2.5.0)
+      matrix (~> 0.4)
+      pdf-core (~> 0.10.0)
+      ttfunk (~> 1.8)
+    racc (1.8.1)
+    rake (13.2.1)
+    rexml (3.4.4)
+    roo (4.0.0)
+      base64 (~> 0.2)
+      csv (~> 3)
+      logger (~> 1)
+      nokogiri (~> 1)
+      rubyzip (>= 3.0.0, < 4.0.0)
+    ruby-vips (2.3.0)
+      ffi (~> 1.12)
+      logger
+    rubyzip (3.7.0)
+    srt (0.1.5)
+    toml-rb (6.0.0)
+    ttfunk (1.8.0)
+      bigdecimal (~> 3.1)
+
+PLATFORMS
+  arm64-darwin
+  x64-mingw-ucrt
+  x86_64-darwin
+  x86_64-linux-gnu
+
+DEPENDENCIES
+  cvt-cli!
+  minitest (>= 5.16)
+  rake (>= 13.0)
+
+BUNDLED WITH
+   2.6.7
