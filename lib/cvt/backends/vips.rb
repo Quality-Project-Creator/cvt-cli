@@ -52,6 +52,7 @@ module Cvt
     def available_for?(from, to, requirements = [])
       return false unless available?
       return false unless Array(requirements).all? { |name| requirement_satisfied?(name) }
+      return false if from.to_s == "pdf" && !pdf_loader_available?
 
       load_supported?(from.to_s) && save_supported?(to.to_s)
     rescue StandardError
@@ -143,6 +144,41 @@ module Cvt
       end
     rescue StandardError
       false
+    end
+
+    # libvips builds without the poppler module can still register pdfload,
+    # so claim PDF input support only after a real load succeeds.
+    def pdf_loader_available?
+      return @pdf_loader_available if defined?(@pdf_loader_available)
+
+      @pdf_loader_available = probe_pdf_loader
+    end
+
+    def probe_pdf_loader
+      Vips::Image.new_from_buffer(minimal_pdf, "", page: 0, n: 1).avg
+      true
+    rescue StandardError
+      false
+    end
+
+    # One empty page with a valid cross-reference table, so poppler loaders
+    # accept the probe without repair warnings.
+    def minimal_pdf
+      objects = [
+        "<</Type/Catalog/Pages 2 0 R>>",
+        "<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        "<</Type/Page/Parent 2 0 R/MediaBox[0 0 10 10]>>"
+      ]
+      body = +"%PDF-1.4\n"
+      offsets = []
+      objects.each_with_index do |object, index|
+        offsets << body.bytesize
+        body << "#{index + 1} 0 obj\n#{object}\nendobj\n"
+      end
+      xref = body.bytesize
+      body << "xref\n0 #{objects.size + 1}\n0000000000 65535 f \n"
+      offsets.each { |offset| body << format("%010d 00000 n \n", offset) }
+      body << "trailer\n<</Size #{objects.size + 1}/Root 1 0 R>>\nstartxref\n#{xref}\n%%EOF\n"
     end
 
     def load_image(input, from, options)

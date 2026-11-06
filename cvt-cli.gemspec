@@ -9,7 +9,7 @@ Gem::Specification.new do |spec|
   spec.description = "A single-command file format converter that reuses mature native gems and external engines."
   spec.authors = ["CVT contributors"]
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.2"
+  spec.required_ruby_version = ">= 3.3"
 
   spec.files = Dir["lib/**/*.rb"] + Dir["data/*.yml"] + Dir["exe/*"] +
                %w[README.md LICENSE ATTRIBUTION.md].select { |path| File.exist?(path) }

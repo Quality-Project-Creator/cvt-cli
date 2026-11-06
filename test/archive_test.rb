@@ -27,7 +27,19 @@ class ArchiveTest < Minitest::Test
   end
 
   def teardown
-    FileUtils.remove_entry(@dir) if @dir && File.directory?(@dir)
+    return unless @dir && File.directory?(@dir)
+
+    # Windows can briefly lock archive output files after writing them.
+    attempts = 0
+    begin
+      FileUtils.remove_entry(@dir)
+    rescue Errno::EACCES, Errno::ENOTEMPTY
+      raise if (attempts += 1) > 20
+
+      GC.start
+      sleep 0.1
+      retry
+    end
   end
 
   def path(name)

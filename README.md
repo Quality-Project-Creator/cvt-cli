@@ -15,7 +15,7 @@ Version: `0.0.1-beta`.
 
 ## Requirements
 
-- Ruby 3.2 or newer.
+- Ruby 3.3 or newer.
 - Optional engines, installed per platform:
 
   | Engine | Used for | Override |
@@ -132,7 +132,7 @@ bundle exec rake test        # core suite; engine-dependent tests skip
 CVT_INTEGRATION=1 bundle exec rake test
 ```
 
-CI runs the core suite on Linux, macOS and Windows with Ruby 3.2 and 3.4,
+CI runs the core suite on Linux, macOS and Windows with Ruby 3.3 and 3.4,
 plus an integration job on Ubuntu with engine packages installed.
 
 ## License

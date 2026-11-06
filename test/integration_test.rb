@@ -52,6 +52,12 @@ class IntegrationTest < Minitest::Test
     Open3.capture3(RbConfig.ruby, EXE, *args)
   end
 
+  # libvips writes GLib warnings straight to fd 2 when a build ships without
+  # optional modules. Those are engine diagnostics, not CVT output.
+  def clean_stderr(stderr)
+    stderr.lines.reject { |line| line.match?(/\(process:\d+\): .*-WARNING \*\*:/) }.join.strip
+  end
+
   def skip_unless_route(from, to)
     result = @router.route(from, to)
     skip "no available route #{from} -> #{to}: #{result.error&.message}" unless result.ok?
@@ -60,7 +66,7 @@ class IntegrationTest < Minitest::Test
   def convert_success(source, target, *options)
     stdout, stderr, status = run_cvt(source, target, *options)
     assert_equal 0, status.exitstatus, "cvt #{source} -> #{target} failed:\n#{stdout}\n#{stderr}"
-    assert_equal "", stderr
+    assert_equal "", clean_stderr(stderr)
 
     document = YAML.safe_load(stdout)
     assert_equal true, document["ok"]
@@ -72,7 +78,7 @@ class IntegrationTest < Minitest::Test
   def convert_failure(source, target, code, exit_code, *options)
     stdout, stderr, status = run_cvt(source, target, *options)
     assert_equal exit_code, status.exitstatus, "cvt #{source} -> #{target} failed:\n#{stdout}\n#{stderr}"
-    assert_equal "", stderr
+    assert_equal "", clean_stderr(stderr)
 
     document = YAML.safe_load(stdout)
     assert_equal false, document["ok"]
@@ -151,7 +157,7 @@ class IntegrationTest < Minitest::Test
   def test_doctor_reports_engine_paths_versions_and_hints
     stdout, stderr, status = run_cvt("--doctor")
     assert_equal 0, status.exitstatus
-    assert_equal "", stderr
+    assert_equal "", clean_stderr(stderr)
 
     document = YAML.safe_load(stdout)
     assert_equal "doctor", document["operation"]
@@ -385,7 +391,7 @@ class IntegrationTest < Minitest::Test
 
     stdout, stderr, status = run_cvt(source, target, "--dry-run")
     assert_equal 0, status.exitstatus
-    assert_equal "", stderr
+    assert_equal "", clean_stderr(stderr)
 
     document = YAML.safe_load(stdout)
     assert_equal true, document["ok"]

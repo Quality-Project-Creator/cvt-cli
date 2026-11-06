@@ -3,6 +3,7 @@
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
 
 require "base64"
+require "fileutils"
 require "minitest/autorun"
 require "tmpdir"
 require "cvt"
@@ -33,6 +34,30 @@ class ImageTest < Minitest::Test
 
   def setup
     %w[vips imagemagick rsvg].each { |id| backend(id) }
+  end
+
+  # Windows keeps engine-written files locked for a moment after the call
+  # returns, so plain Dir.mktmpdir cleanup can raise EACCES. Retry after GC.
+  def with_tmpdir(prefix)
+    dir = Dir.mktmpdir(prefix)
+    yield dir
+  ensure
+    remove_tmpdir(dir)
+  end
+
+  def remove_tmpdir(dir)
+    return unless dir && File.directory?(dir)
+
+    attempts = 0
+    begin
+      FileUtils.remove_entry(dir)
+    rescue Errno::EACCES, Errno::ENOTEMPTY
+      raise if (attempts += 1) > 20
+
+      GC.start
+      sleep 0.1
+      retry
+    end
   end
 
   def fixture(dir, name, base64)
@@ -181,7 +206,7 @@ class ImageTest < Minitest::Test
     vips = backend("vips")
     skip "libvips is unavailable" unless vips&.available_for?("png", "webp", [])
 
-    Dir.mktmpdir("cvt-image") do |dir|
+    with_tmpdir("cvt-image") do |dir|
       input = fixture(dir, "sample.png", PNG_BASE64)
       output = File.join(dir, "out.webp")
       warnings = []
@@ -196,7 +221,7 @@ class ImageTest < Minitest::Test
     vips = backend("vips")
     skip "libvips is unavailable" unless vips&.available_for?("png", "jpg", [])
 
-    Dir.mktmpdir("cvt-image") do |dir|
+    with_tmpdir("cvt-image") do |dir|
       input = fixture(dir, "alpha.png", ALPHA_PNG_BASE64)
       output = File.join(dir, "out.jpg")
       warnings = []
