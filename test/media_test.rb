@@ -10,6 +10,10 @@ require "cvt"
 class MediaTest < Minitest::Test
   SAMPLE_RATE = 44_100
 
+  def setup
+    Cvt::Backends.load("ffmpeg")
+  end
+
   def backend
     Cvt::Backends.load("ffmpeg")
     Cvt::Backend.implementation("ffmpeg").new
