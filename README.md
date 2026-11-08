@@ -48,21 +48,22 @@ Version: `0.1.0-beta`.
 Download the file for your platform from the
 [v0.1.0-beta release](https://github.com/Quality-Project-Creator/cvt-cli/releases/tag/v0.1.0-beta):
 
-| Platform | File |
-| --- | --- |
-| Linux x86_64 | `cvt-0.1.0-beta-linux-x86_64` |
-| macOS arm64 | `cvt-0.1.0-beta-macos-arm64` |
-| Windows x86_64 | `cvt-0.1.0-beta-windows-x86_64.exe` |
+| Platform | Download | Inside |
+| --- | --- | --- |
+| Linux x86_64 | `cvt-0.1.0-beta-linux-x86_64.tar.gz` | `cvt-0.1.0-beta-linux-x86_64` |
+| macOS arm64 | `cvt-0.1.0-beta-macos-arm64.tar.gz` | `cvt-0.1.0-beta-macos-arm64` |
+| Windows x86_64 | `cvt-0.1.0-beta-windows-x86_64.zip` | `cvt-0.1.0-beta-windows-x86_64.exe` |
 
 ```sh
-chmod +x cvt-0.1.0-beta-linux-x86_64
+tar -xzf cvt-0.1.0-beta-linux-x86_64.tar.gz
 ./cvt-0.1.0-beta-linux-x86_64 --version
 ```
 
-The standalone build is a self-contained Tebako package: Ruby and all
-conversion gems live inside the file and are mounted at run time, so the
-first run needs no network. Check downloads against `SHA256SUMS` on the
-release page.
+The raw executables are attached to the release as well. Archives are the
+smaller download; both contain the same self-contained Tebako package:
+Ruby and all conversion gems live inside the executable and are mounted at
+run time, so the first run needs no network. Check downloads against
+`SHA256SUMS` on the release page.
 
 ### Gem
 
@@ -164,9 +165,11 @@ before release:
   CI files and development gems are excluded;
 - `limnifs` and `dwarfs` images are both built, and the smaller one is kept
   when startup does not regress;
-- UPX is applied on Linux and Windows only when it shrinks the file by at
+- UPX is tried on Linux and Windows only when it shrinks the file by at
   least 5%, passes `upx -t`, keeps every smoke test green, and does not slow
-  `--version` by more than 20%.
+  `--version` by more than 20%. Tebako's self-mounting packages fail the
+  post-pack verification, so releases also ship a compressed archive
+  (`.tar.gz` / `.zip`) next to the raw executable.
 
 Measured sizes for each release are listed in the release notes.
 

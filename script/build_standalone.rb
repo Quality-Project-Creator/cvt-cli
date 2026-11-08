@@ -128,22 +128,22 @@ def lock_bundle
              "---\nBUNDLE_FROZEN: \"true\"\nBUNDLE_DEPLOYMENT: \"true\"\nBUNDLE_PATH: \"vendor/bundle\"\n")
 end
 
-def tebako_store
-  return ENV["TEBAKO_HOME"] if ENV["TEBAKO_HOME"]
-
-  if Gem.win_platform?
-    File.join(ENV.fetch("LOCALAPPDATA"), "tebako")
-  else
-    File.join(Dir.home, ".tebako")
-  end
+# Tebako splits its store across ~/.tebako and %LOCALAPPDATA%\tebako on
+# Windows, so every operation probes both locations.
+def tebako_stores
+  candidates = [ENV["TEBAKO_HOME"], File.join(Dir.home, ".tebako")]
+  candidates << File.join(ENV["LOCALAPPDATA"], "tebako") if Gem.win_platform? && ENV["LOCALAPPDATA"]
+  candidates.compact.uniq
 end
 
 # Tebako deploys the bundle into its packaging environment but packs the
 # project tree from disk. Import the runtime-built gems into the project so
 # the image actually carries them.
 def import_vendor_bundle
-  source = File.join(tebako_store, "o", "s", "local", "vendor", "bundle")
-  fail!("tebako deployed no bundle at #{source}") unless Dir.exist?(source)
+  source = tebako_stores
+           .map { |base| File.join(base, "o", "s", "local", "vendor", "bundle") }
+           .find { |path| Dir.exist?(path) }
+  fail!("tebako deployed no bundle under #{tebako_stores.join(', ')}") unless source
 
   dest = File.join(STAGE, "vendor", "bundle")
   FileUtils.rm_rf(dest)
@@ -160,7 +160,7 @@ def press(format, output)
   # Each press seeds the payload cache; a stale seed for the same name but
   # other bytes makes the bootstrap print a digest-mismatch warning.
   cache_name = File.basename(output).sub(/\.(limnifs|dwarfs)\z/, "")
-  FileUtils.rm_rf(File.join(tebako_store, "payloads", cache_name))
+  tebako_stores.each { |base| FileUtils.rm_rf(File.join(base, "payloads", cache_name)) }
   run!(
     "tebako", "press",
     "-r", STAGE,
@@ -176,9 +176,10 @@ def press(format, output)
     "--exclude", "build/**",
     "--exclude", "dist/**"
   )
-  fail!("press produced no output") unless File.file?(output) && File.size(output).positive?
+  actual = File.file?(output) ? output : "#{output}.exe"
+  fail!("press produced no output") unless File.file?(actual) && File.size(actual).positive?
 
-  output
+  actual
 end
 
 def smoke(binary)
@@ -224,39 +225,63 @@ def upx_available?
 end
 
 def maybe_upx(binary, baseline_ms)
-  return [binary, "skipped (macOS)" ] if RbConfig::CONFIG["host_os"].match?(/darwin/)
+  return [binary, "skipped (macOS)"] if RbConfig::CONFIG["host_os"].match?(/darwin/)
   return [binary, "skipped (upx not installed)"] unless upx_available?
 
   packed = "#{binary}.upx"
-  FileUtils.cp(binary, packed)
-  run!("upx", "--best", "--lzma", packed)
-  run!("upx", "-t", packed)
-
-  original = File.size(binary)
-  packed_size = File.size(packed)
-  gain = 1.0 - (packed_size.to_f / original)
-  packed_ms = startup_ms(packed)
-
-  if gain < SIZE_GAIN_MIN
-    FileUtils.rm_f(packed)
-    return [binary, format("skipped (gain %.1f%% < %.0f%%)", gain * 100, SIZE_GAIN_MIN * 100)]
-  end
-  if packed_ms > baseline_ms * STARTUP_SLOWDOWN_MAX
-    FileUtils.rm_f(packed)
-    return [binary, format("skipped (startup %.0fms > %.0fms)", packed_ms, baseline_ms * STARTUP_SLOWDOWN_MAX)]
-  end
-
   begin
+    FileUtils.cp(binary, packed)
+    run!("upx", "--best", "--lzma", packed)
+    run!("upx", "-t", packed)
+
+    original = File.size(binary)
+    gain = 1.0 - (File.size(packed).to_f / original)
+    packed_ms = startup_ms(packed)
+
+    if gain < SIZE_GAIN_MIN
+      FileUtils.rm_f(packed)
+      return [binary, format("skipped (gain %.1f%% < %.0f%%)", gain * 100, SIZE_GAIN_MIN * 100)]
+    end
+    if packed_ms > baseline_ms * STARTUP_SLOWDOWN_MAX
+      FileUtils.rm_f(packed)
+      return [binary, format("skipped (startup %.0fms > %.0fms)", packed_ms,
+                             baseline_ms * STARTUP_SLOWDOWN_MAX)]
+    end
+
     smoke(packed)
   rescue SystemExit
+    # A Tebako package is a self-mounting executable; UPX may rewrite the
+    # offsets the bootstrap relies on. Verification decides, never the ratio.
     FileUtils.rm_f(packed)
-    return [binary, "skipped (smoke test failed)"]
+    return [binary, "skipped (packed binary failed verification)"]
   end
 
   FileUtils.rm_f(binary)
   FileUtils.mv(packed, binary)
   FileUtils.chmod(0o755, binary)
   [binary, format("applied (%.1f%% smaller)", gain * 100)]
+end
+
+# Download size matters even when the executable itself cannot be UPX-packed.
+def compressed_asset(binary)
+  if Gem.win_platform?
+    require "zip"
+    archive = "#{binary}.zip"
+    FileUtils.rm_f(archive)
+    Zip::File.open(archive, create: true) { |zip| zip.add(File.basename(binary), binary) }
+  else
+    require "rubygems/package"
+    require "zlib"
+    archive = "#{binary}.tar.gz"
+    Zlib::GzipWriter.open(archive) do |gz|
+      Gem::Package::TarWriter.new(gz) do |tar|
+        tar.add_file_simple(File.basename(binary), 0o755, File.size(binary)) do |io|
+          File.open(binary, "rb") { |source| IO.copy_stream(source, io) }
+        end
+      end
+    end
+  end
+  archive
 end
 
 def checksum(binary)
@@ -278,22 +303,19 @@ if Dir.exist?(VENDOR_CACHE)
   FileUtils.cp_r(VENDOR_CACHE, File.join(STAGE, "vendor", "bundle"))
   log "reused cached runtime gems from #{VENDOR_CACHE}"
 else
-  warmup = File.join(DIST, ".warmup")
-  press("limnifs", warmup)
+  warmup = press("limnifs", File.join(DIST, ".warmup"))
   FileUtils.rm_f(warmup)
   import_vendor_bundle
 end
 
-limnifs = File.join(DIST, "#{name}.limnifs")
-press("limnifs", limnifs)
+limnifs = press("limnifs", File.join(DIST, "#{name}.limnifs"))
 smoke(limnifs)
 limnifs_ms = startup_ms(limnifs)
 
 chosen = limnifs
 format_note = "limnifs"
 unless skip_format_comparison
-  dwarfs = File.join(DIST, "#{name}.dwarfs")
-  press("dwarfs", dwarfs)
+  dwarfs = press("dwarfs", File.join(DIST, "#{name}.dwarfs"))
   smoke(dwarfs)
   dwarfs_ms = startup_ms(dwarfs)
   gain = 1.0 - (File.size(dwarfs).to_f / File.size(limnifs))
@@ -317,6 +339,10 @@ unless skip_upx
 end
 
 checksum(final)
+archive = compressed_asset(final)
+checksum(archive)
 File.write(File.join(DIST, "sizes.txt"),
-           "#{name}\tformat=#{format_note}\tbytes=#{File.size(final)}\tstartup_ms=#{final_ms}\tupx=#{upx_note}\n")
-log "built #{final} (#{File.size(final)} bytes, format=#{format_note}, startup=#{final_ms}ms, upx=#{upx_note})"
+           "#{name}\tformat=#{format_note}\tbytes=#{File.size(final)}\t" \
+           "archive_bytes=#{File.size(archive)}\tstartup_ms=#{final_ms}\tupx=#{upx_note}\n")
+log "built #{final} (#{File.size(final)} bytes, format=#{format_note}, startup=#{final_ms}ms, " \
+    "upx=#{upx_note}, download=#{File.basename(archive)} #{File.size(archive)} bytes)"
