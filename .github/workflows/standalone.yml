@@ -81,7 +81,7 @@ jobs:
           name: standalone-${{ matrix.platform }}
           path: |
             dist/cvt-*
-            dist/sizes.txt
+            dist/sizes-*.txt
           if-no-files-found: error
 
   release:
@@ -103,7 +103,7 @@ jobs:
         run: |
           cd artifacts
           cat *.sha256 | sort > SHA256SUMS
-          cat sizes.txt > ../sizes.txt
+          cat sizes-*.txt > ../sizes.txt
 
       - name: Publish prerelease
         env:

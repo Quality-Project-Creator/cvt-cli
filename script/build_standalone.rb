@@ -338,7 +338,7 @@ end
 checksum(final)
 archive = compressed_asset(final)
 checksum(archive)
-File.write(File.join(DIST, "sizes.txt"),
+File.write(File.join(DIST, "sizes-#{platform}.txt"),
            "#{name}\tformat=#{format_note}\tbytes=#{File.size(final)}\t" \
            "archive_bytes=#{File.size(archive)}\tstartup_ms=#{final_ms}\tupx=#{upx_note}\n")
 log "built #{final} (#{File.size(final)} bytes, format=#{format_note}, startup=#{final_ms}ms, " \
