@@ -119,6 +119,9 @@ jobs:
             cat sizes.txt
             echo '```'
           } > notes.md
-          gh release view "$TAG" >/dev/null 2>&1 || \
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file notes.md
+          else
             gh release create "$TAG" --prerelease --title "CVT $TAG" --notes-file notes.md
+          fi
           gh release upload "$TAG" artifacts/cvt-* artifacts/SHA256SUMS cvt-cli-*.gem --clobber
