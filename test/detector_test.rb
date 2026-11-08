@@ -145,6 +145,17 @@ class DetectorTest < Minitest::Test
     end
   end
 
+  def test_csv_with_quoted_comma_is_detected_without_extension
+    Dir.mktmpdir("cvt-csv-quoted") do |dir|
+      path = File.join(dir, "quoted-comma")
+      File.write(path, "name,note\nAlice,\"hello, world\"\nBob,x\n")
+
+      result = @detector.detect(path)
+
+      assert_equal "csv", result.id
+    end
+  end
+
   def test_unknown_and_unreadable_inputs_do_not_crash
     assert_nil @detector.detect("/definitely/missing/file").format
 

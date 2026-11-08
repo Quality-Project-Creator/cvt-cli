@@ -80,6 +80,9 @@ module Cvt
             write_tree(output, value, to, options)
           end
         end
+      rescue SystemStackError
+        raise conversion_error("Input is nested too deeply",
+                               hint: "Flatten the document before converting.")
       end
 
       def read_tree(path, from, options = {})
@@ -246,16 +249,37 @@ module Cvt
       end
 
       def parse_delimited(content, separator)
-        table = CSV.parse(content, headers: true, col_sep: separator, row_sep: :auto,
-                                   skip_blanks: true)
-        table.map do |row|
-          values = stringify_keys(row.to_h)
-          values.each { |key, value| values[key] = "" if value.nil? }
-          values
+        table = CSV.parse(content, col_sep: separator, row_sep: :auto, skip_blanks: true)
+        return [] if table.empty?
+
+        headers = unique_names(delimited_headers(table))
+        table.drop(1).map do |fields|
+          headers.each_with_index.to_h { |header, index| [header, fields[index].to_s] }
         end
       rescue CSV::MalformedCSVError => e
         raise conversion_error("Invalid CSV: #{first_line(e.message)}",
                                hint: "Check quoting and the --delimiter option.")
+      end
+
+      # The first row names the columns; rows with more fields than the
+      # header get positional names so no field is dropped.
+      def delimited_headers(table)
+        width = table.map(&:length).max
+        names = table.first.to_a
+        return names if names.length >= width
+
+        names + ((names.length + 1)..width).map { |index| "column#{index}" }
+      end
+
+      # Column names must be unique inside one table: duplicates get a
+      # suffix so no column is silently dropped.
+      def unique_names(names)
+        seen = Hash.new(0)
+        names.map do |name|
+          base = name.to_s
+          seen[base] += 1
+          seen[base] > 1 ? "#{base}_#{seen[base]}" : base
+        end
       end
 
       def parse_json(content)
@@ -279,6 +303,9 @@ module Cvt
       rescue Psych::Exception => e
         raise conversion_error("Invalid YAML: #{first_line(e.message)}",
                                hint: "Use a single YAML document with plain mappings or sequences.")
+      rescue SystemStackError
+        raise conversion_error("YAML input is nested too deeply",
+                               hint: "Flatten the document before converting.")
       end
 
       def ensure_single_yaml_document!(content)

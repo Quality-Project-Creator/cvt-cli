@@ -52,11 +52,9 @@ module Cvt
         case from.to_s
         when "gz"
           written = 0
-          Zlib::GzipReader.open(input) do |gz|
-            File.open(payload, "wb") do |out|
-              while (chunk = gz.read(CHUNK_SIZE))
-                break if chunk.empty?
-
+          File.open(payload, "wb") do |out|
+            File.open(input, "rb") do |io|
+              Archive::GzipStream.new(io).each_chunk do |chunk|
                 written += chunk.bytesize
                 raise size_error if max_size.positive? && written > max_size
 

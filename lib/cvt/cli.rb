@@ -43,7 +43,7 @@ module Cvt
       @opts = {
         force: false, dry_run: false, quiet: false, debug: false,
         version: false, formats: false, backends: false, doctor: false,
-        available: false, format: nil, category: nil,
+        available: false, help: false, format: nil, category: nil,
         from: nil, to: nil, backend: nil
       }
       @provided = {}
@@ -54,7 +54,7 @@ module Cvt
     def run(argv)
       prepare_output
       arguments = Array(argv).map(&:to_s)
-      if arguments.include?("-h") || arguments.include?("--help")
+      if help_flag?(arguments)
         @out.puts(@parser)
         return 0
       end
@@ -67,6 +67,11 @@ module Cvt
         positional = @parser.parse!(arguments)
       rescue OptionParser::ParseError => e
         return print_result(usage_result(e.message))
+      end
+
+      if @opts[:help]
+        @out.puts(@parser)
+        return 0
       end
 
       if (error = info_usage_error(positional))
@@ -98,6 +103,12 @@ module Cvt
     end
 
     private
+
+    # "--" ends option parsing, so every argument behind it is an operand.
+    def help_flag?(arguments)
+      flags = arguments.take_while { |argument| argument != "--" }
+      flags.include?("-h") || flags.include?("--help")
+    end
 
     # YAML is always UTF-8; pin Windows console/pipe streams to UTF-8 so the
     # output does not depend on the active code page. Unix streams are left

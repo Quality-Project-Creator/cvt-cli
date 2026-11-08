@@ -79,6 +79,18 @@ class DocsTest < Minitest::Test
     refute_includes html, "\r"
   end
 
+  def test_markdown_fenced_code_block_becomes_pre
+    backend = Cvt::Backends.load("native_text")
+    source = fixture("code.md", "# Title\n\n```ruby\nputs \"hi\"\n```\n")
+    output = File.join(@dir, "code.html")
+
+    convert(backend, "md", "html", source, output)
+
+    html = read_utf8(output)
+    assert_includes html, "<pre>"
+    assert_includes html, "puts \"hi\""
+  end
+
   def test_markdown_to_text
     backend = Cvt::Backends.load("native_text")
     source = fixture("note.md", "# Heading\n\nSome **bold** text.\n")

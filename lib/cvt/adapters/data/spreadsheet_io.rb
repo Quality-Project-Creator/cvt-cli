@@ -79,7 +79,8 @@ module Cvt
               sheet.add_row(header, style: bold)
             end
             rows.each do |row|
-              sheet.add_row(header.map { |key| cell_for_xlsx(row[key]) })
+              values = header.map { |key| cell_for_xlsx(row[key]) }
+              sheet.add_row(values, types: values.map { |value| xlsx_type(value) })
             end
             sheet.column_widths(*column_widths(header, rows)) unless header.empty?
           end
@@ -97,13 +98,17 @@ module Cvt
 
           if key.match?(/\A\d+\z/)
             index = key.to_i
-            unless index >= 1 && index <= book.sheets.size
-              raise Data.conversion_error(
-                "Worksheet index out of range: #{key}",
-                hint: "The workbook has #{book.sheets.size} sheet(s): #{book.sheets.join(', ')}."
-              )
-            end
-            return index - 1
+            return index - 1 if index >= 1 && index <= book.sheets.size
+
+            # A sheet may be named like a number, so the key is a name when
+            # it is out of range as an index.
+            found = book.sheets.index(key)
+            return found if found
+
+            raise Data.conversion_error(
+              "Worksheet index out of range: #{key}",
+              hint: "The workbook has #{book.sheets.size} sheet(s): #{book.sheets.join(', ')}."
+            )
           end
 
           found = book.sheets.index(key)
@@ -122,10 +127,10 @@ module Cvt
 
           header_values = Array(sheet.row(1))
           width = [header_values.length, sheet.last_column.to_i].max
-          headers = (0...width).map do |index|
+          headers = Data.unique_names((0...width).map do |index|
             name = header_values[index].to_s.strip
             name.empty? ? "column#{index + 1}" : name
-          end
+          end)
 
           (2..last_row).map do |number|
             values = Array(sheet.row(number))
@@ -148,6 +153,27 @@ module Cvt
           else
             value.respond_to?(:iso8601) ? Data.iso8601(value) : value.to_s
           end
+        end
+
+        # caxlsx rewrites numeric-looking strings into numbers, which changes
+        # the text of values such as "001" or "10.50". Only values that keep
+        # their text in a spreadsheet are left to that conversion.
+        def xlsx_type(value)
+          return nil unless value.is_a?(String)
+          return nil unless lossy_number?(value)
+
+          :string
+        end
+
+        def lossy_number?(value)
+          text = value.strip
+          return false unless text.match?(/\A[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]{1,3})?\z/)
+
+          digits = text.delete("+-")
+          return true if digits.match?(/\A\d+\z/) && digits.length > 15
+
+          number = text.match?(/[.eE]/) ? text.to_f : text.to_i
+          number.to_s != text
         end
 
         def column_widths(header, rows)

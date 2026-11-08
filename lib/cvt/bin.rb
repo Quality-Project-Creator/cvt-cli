@@ -97,13 +97,17 @@ module Cvt
     module_function
 
     # Finds the first executable from `names` (String or Array). An explicit
-    # override through `env_var` takes precedence; when present but empty the
-    # PATH scan continues normally.
+    # override through `env_var` takes precedence when it points at a usable
+    # executable; a missing, empty, or unusable override falls back to the
+    # PATH scan so an installed engine stays visible.
     def find(names, env_var: nil)
       entries = Array(names).map { |name| name.to_s.strip }.reject(&:empty?)
       if env_var
         override = ENV[env_var].to_s.strip
-        return resolve_explicit(override) unless override.empty?
+        unless override.empty?
+          explicit = resolve_explicit(override)
+          return explicit if explicit
+        end
       end
 
       entries.each do |name|

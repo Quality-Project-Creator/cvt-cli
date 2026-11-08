@@ -98,6 +98,18 @@ class CliTest < Minitest::Test
     assert_equal "", clean_stderr(stderr)
   end
 
+  def test_help_abbreviation_prints_help_and_exits_zero
+    code, output, = run_cli(["--hel"])
+    assert_equal 0, code
+    assert_includes output, "Usage: cvt SOURCE TARGET"
+  end
+
+  def test_help_option_after_separator_is_treated_as_a_filename
+    code, output, = run_cli(["--", "--help", "out.txt"])
+    assert_equal 5, code
+    assert_equal "input_not_found", parse_yaml(output)["error"]["code"]
+  end
+
   def test_no_arguments_prints_help_and_exits_two
     stdout, stderr, status = run_exe
     assert_equal 2, status.exitstatus

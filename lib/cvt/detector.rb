@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "csv"
 require "date"
 require "json"
 require "psych"
@@ -353,8 +354,12 @@ module Cvt
       return 0.0 if lines.size < 2
       return 0.0 if lines.any? { |line| line.start_with?("|") }
 
-      rows = lines.first(10).map { |line| line.split(delimiter, -1) }
-      widths = rows.map(&:size)
+      sample = lines.first(10)
+      widths = begin
+        CSV.parse(sample.join("\n"), col_sep: delimiter).map(&:size)
+      rescue CSV::MalformedCSVError
+        sample.map { |line| line.split(delimiter, -1).size }
+      end
       return 0.0 if widths.min < 2
       return 0.0 unless widths.uniq.size == 1
 

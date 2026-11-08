@@ -18,6 +18,9 @@ module Cvt
         "7z" => { names: %w[7z 7za 7zz], env_var: "CVT_BIN_SEVENZIP" }
       }.freeze
 
+      # Stream formats whose name differs from the tool that handles them.
+      FORMAT_TOOLS = { "bz2" => "bzip2" }.freeze
+
       Selection = Struct.new(:tool, :path, keyword_init: true) do
         def seven_zip?
           tool == "7z"
@@ -34,10 +37,12 @@ module Cvt
       end
 
       # Resolves a route requirement ("xz" or "bzip2") to a runnable tool,
-      # preferring the native binary and falling back to 7-Zip.
+      # preferring the native binary and falling back to 7-Zip. Stream format
+      # names such as "bz2" are mapped to the tool that handles them.
       def select_tool(name)
-        direct = tool_path(name)
-        return Selection.new(tool: name.to_s, path: direct) if direct
+        tool = FORMAT_TOOLS.fetch(name.to_s, name.to_s)
+        direct = tool_path(tool)
+        return Selection.new(tool: tool, path: direct) if direct
 
         fallback = tool_path("7z")
         fallback && Selection.new(tool: "7z", path: fallback)
@@ -45,9 +50,10 @@ module Cvt
 
       def requirements_available?(requirements)
         Array(requirements).all? do |name|
-          next false unless TOOL_SPECS.key?(name.to_s)
+          tool = FORMAT_TOOLS.fetch(name.to_s, name.to_s)
+          next false unless TOOL_SPECS.key?(tool)
 
-          !select_tool(name).nil?
+          !select_tool(tool).nil?
         end
       end
     end

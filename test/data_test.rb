@@ -86,6 +86,27 @@ class DataTest < Minitest::Test
     assert_equal [{ "name" => "Widget", "qty" => "3" }], JSON.parse(rows)
   end
 
+  def test_csv_duplicate_headers_keep_every_column
+    output, = convert("csv", "json", "name,name\nAlice,Bob\n")
+
+    assert_equal [{ "name" => "Alice", "name_2" => "Bob" }], JSON.parse(output)
+  end
+
+  def test_csv_rows_with_extra_fields_keep_them
+    output, = convert("csv", "json", "a,b\n1,2,3\n4\n")
+    rows = JSON.parse(output)
+
+    assert_equal [{ "a" => "1", "b" => "2", "column3" => "3" },
+                  { "a" => "4", "b" => "", "column3" => "" }], rows
+  end
+
+  def test_deeply_nested_yaml_is_reported_as_an_error
+    depth = 2000
+    error = assert_conversion_error("yaml", "json", ("[" * depth) + ("]" * depth))
+
+    assert_match(/nested/, error.message)
+  end
+
   def test_csv_delimiter_option
     output, = convert("csv", "json", "name|qty\nWidget|3\n", "delimiter" => "|")
     assert_equal [{ "name" => "Widget", "qty" => "3" }], JSON.parse(output)

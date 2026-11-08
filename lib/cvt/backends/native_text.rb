@@ -108,7 +108,25 @@ module Cvt
       end
 
       def markdown_to_html(text)
-        Kramdown::Document.new(text, input: "kramdown").to_html
+        Kramdown::Document.new(translate_fences(text), input: "kramdown").to_html
+      end
+
+      # kramdown understands only ~~~ fences; a CommonMark ``` fence becomes an
+      # inline code span and the code block is lost. Fences already using
+      # tildes are left alone, as are ``` lines inside a ~~~ block.
+      def translate_fences(text)
+        fence = nil
+        text.gsub(/^([ \t]{0,3})(`{3,}|~{3,})([^\r\n]*)/) do
+          prefix, marker, rest = Regexp.last_match.captures
+          if fence.nil?
+            fence = marker[0]
+          elsif marker[0] == fence
+            fence = nil
+          else
+            next Regexp.last_match[0]
+          end
+          "#{prefix}#{'~' * marker.length}#{rest}"
+        end
       end
 
       def text_to_html(text)

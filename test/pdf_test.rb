@@ -171,6 +171,23 @@ class PdfTest < Minitest::Test
     end
   end
 
+  def test_pdf_to_txt_page_above_page_count_reports_the_page_range
+    skip "prawn is unavailable" unless prawn_available?
+    skip "pdf-reader is unavailable" unless pdf_reader_available?
+
+    Dir.mktmpdir("cvt-pdf") do |dir|
+      input = two_page_pdf(dir)
+      output = File.join(dir, "out.txt")
+      error = assert_raises(Cvt::Error) do
+        @pdf.convert(input, output, options("pdf", "txt", "page" => 4), [])
+      end
+      assert_equal "conversion_failed", error.code
+      assert_includes error.message, "does not exist"
+      refute_includes error.message, "extract text from the PDF"
+      refute File.exist?(output)
+    end
+  end
+
   def test_damaged_pdf_fails_without_output
     Dir.mktmpdir("cvt-pdf") do |dir|
       input = File.join(dir, "damaged.pdf")
@@ -275,5 +292,12 @@ class PdfTest < Minitest::Test
 
   def reader_available?
     @pdf.available_for?("pdf", "txt", [])
+  end
+
+  def pdf_reader_available?
+    require "pdf-reader"
+    true
+  rescue LoadError
+    false
   end
 end

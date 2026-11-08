@@ -129,7 +129,14 @@ module Cvt
           lines = block.split("\n")
           next if lines.empty?
           first = lines.first.strip
-          next if first.start_with?("WEBVTT")
+          if first.start_with?("WEBVTT")
+            # The signature often shares a block with the first cue: drop only
+            # the signature line, never the cues below it.
+            lines = lines.drop(1)
+            next if lines.empty?
+            next unless lines.any? { |line| line.include?("-->") }
+            first = lines.first.strip
+          end
           next if first.start_with?("NOTE")
           if first.start_with?("STYLE", "REGION")
             style_blocks_seen = true

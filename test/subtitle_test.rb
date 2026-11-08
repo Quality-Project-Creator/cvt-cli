@@ -97,6 +97,17 @@ class SubtitleTest < Minitest::Test
     assert warnings.any? { |warning| warning["code"] == "style_loss" }
   end
 
+  def test_vtt_signature_sharing_a_block_keeps_the_first_cue
+    vtt = "WEBVTT\n00:00:01.000 --> 00:00:02.000\nHi\n\n00:00:04.000 --> 00:00:05.000\nBye\n"
+
+    output, = convert("vtt", "srt", vtt)
+
+    assert_includes output, "00:00:01,000 --> 00:00:02,000"
+    assert_includes output, "Hi"
+    assert_includes output, "00:00:04,000 --> 00:00:05,000"
+    assert_includes output, "Bye"
+  end
+
   def test_vtt_style_block_warning
     vtt = <<~VTT
       WEBVTT

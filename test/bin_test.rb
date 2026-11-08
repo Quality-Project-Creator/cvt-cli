@@ -63,6 +63,17 @@ class BinTest < Minitest::Test
     end
   end
 
+  def test_env_override_pointing_at_a_missing_path_falls_back_to_the_path_scan
+    Dir.mktmpdir("cvt-bin") do |dir|
+      path = create_tool(dir, "installed-tool")
+      override = File.join(dir, "missing", "installed-tool")
+      with_env("PATH" => dir, "CVT_TEST_BIN_OVERRIDE" => override) do
+        assert_equal File.expand_path(path),
+                     Cvt::Bin.find("installed-tool", env_var: "CVT_TEST_BIN_OVERRIDE")
+      end
+    end
+  end
+
   def test_missing_name_returns_nil
     with_env("PATH" => "", "CVT_TEST_BIN_OVERRIDE" => "") do
       assert_nil Cvt::Bin.find("cvt-definitely-missing")

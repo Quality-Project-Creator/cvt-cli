@@ -27,6 +27,120 @@ module Cvt
 
       Entry = Struct.new(:name, :mode, :mtime, :size, :directory, :io, keyword_init: true)
 
+      # Streaming reader for gzip files that may hold several members.
+      # Zlib::GzipReader stops after the first member, so a concatenated
+      # archive would silently lose everything after it.
+      class GzipStream
+        CHUNK_SIZE = 64 * 1024
+
+        def initialize(io)
+          @io = io
+          @input = +"".b
+          @pending = +"".b
+          @inflater = Zlib::Inflate.new(Zlib::MAX_WBITS + 16)
+          @pos = 0
+          @done = false
+          @member_done = false
+        end
+
+        def pos
+          @pos
+        end
+
+        def eof?
+          @done && @pending.empty?
+        end
+
+        def read(maxlen = nil)
+          return read_all if maxlen.nil?
+
+          return "" if maxlen.to_i.zero?
+
+          while @pending.bytesize < maxlen && !@done
+            pump
+          end
+          out = @pending.slice!(0, maxlen)
+          @pos += out.bytesize
+          out.empty? && eof? ? nil : out
+        end
+
+        def getc
+          read(1)&.byteslice(0, 1)
+        end
+
+        def each_chunk
+          while (chunk = read(CHUNK_SIZE))
+            break if chunk.empty?
+
+            yield chunk
+          end
+        end
+
+        def close
+          @inflater.close
+        end
+
+        private
+
+        def read_all
+          out = +"".b
+          until @done
+            pump
+            out << @pending
+            @pending = +"".b
+          end
+          @pos += out.bytesize
+          out
+        end
+
+        # Decompresses one member step. @member_done tracks whether the last
+        # member ended cleanly, so a truncated stream is reported instead of
+        # being passed off as a complete file.
+        def pump
+          loop do
+            if @input.empty?
+              chunk = @io.read(CHUNK_SIZE)
+              if chunk.nil?
+                finish
+                return
+              end
+              @input << chunk
+            end
+
+            before = @inflater.total_in
+            data = @inflater.inflate(@input)
+            consumed = @inflater.total_in - before
+            @input = @input.byteslice(consumed, @input.bytesize - consumed) || +"".b
+            @pending << data unless data.empty?
+
+            if @inflater.finished?
+              @inflater.close
+              @inflater = Zlib::Inflate.new(Zlib::MAX_WBITS + 16)
+              @member_done = true
+            else
+              @member_done = false
+            end
+
+            return unless @pending.empty?
+            next unless data.empty? && consumed.zero?
+
+            chunk = @io.read(CHUNK_SIZE)
+            if chunk.nil?
+              finish
+              return
+            end
+            @input << chunk
+          end
+        end
+
+        def finish
+          @done = true
+          return if @member_done
+
+          raise Zlib::GzipFile::Error, "unexpected end of file"
+        end
+      end
+
       # Gem::Package::TarWriter stamps entries with SOURCE_DATE_EPOCH. This
       # subclass keeps the reader/writer pairing but accepts the source mtime.
       class MtimeTarWriter < Gem::Package::TarWriter
@@ -113,9 +227,9 @@ module Cvt
             end
           end
         when "tar"
-          File.open(path, "rb") { |io| read_tar(io, &block) }
+          File.open(path, "rb") { |io| read_tar(io, path, "tar", &block) }
         when "tgz"
-          Zlib::GzipReader.open(path) { |gz| read_tar(gz, &block) }
+          File.open(path, "rb") { |io| read_tar(GzipStream.new(io), path, "tgz", &block) }
         else
           raise Cvt::Errors.build(
             "unsupported_conversion",
@@ -127,7 +241,7 @@ module Cvt
         raise
       rescue Zip::EntryNameError => e
         raise unsafe_error(e.message)
-      rescue Zip::Error, Zlib::GzipFile::Error, Gem::Package::TarInvalidError,
+      rescue Zip::Error, Zlib::Error, Gem::Package::TarInvalidError,
              Gem::Package::FormatError, Errno::ENOENT => e
         raise corrupt_error("#{format} archive", e)
       end
@@ -165,21 +279,93 @@ module Cvt
         end
       end
 
-      def read_tar(io)
+      def read_tar(io, path, format)
+        each_tar_entry(io) do |name, type, entry|
+          case type
+          when "5"
+            yield Entry.new(name: name, mode: entry.header.mode, mtime: time_from(entry.header.mtime),
+                            size: 0, directory: true)
+          when "0", "\0"
+            yield Entry.new(name: name, mode: entry.header.mode, mtime: time_from(entry.header.mtime),
+                            size: entry.size, directory: false, io: entry)
+          when "1"
+            hardlink_entry(path, format, name, entry) do |size, content|
+              yield Entry.new(name: name, mode: entry.header.mode, mtime: time_from(entry.header.mtime),
+                              size: size, directory: false, io: content)
+            end
+          else
+            raise unsafe_error("non-regular TAR entry #{name.inspect} (type #{type.inspect})")
+          end
+        end
+      end
+
+      # Walks the TAR entries and resolves the name overrides GNU and pax
+      # headers carry: a "L" entry names the next file, an "x" entry holds
+      # pax records whose "path" key names the next file.
+      def each_tar_entry(io)
+        long_name = nil
+        pax_path = nil
         Gem::Package::TarReader.new(io) do |tar|
           tar.each do |entry|
-            name = entry.full_name
             type = entry.header.typeflag
-            if type == "5"
-              yield Entry.new(name: name, mode: entry.header.mode, mtime: time_from(entry.header.mtime),
-                              size: 0, directory: true)
-            elsif type == "0" || type == "\0"
-              yield Entry.new(name: name, mode: entry.header.mode, mtime: time_from(entry.header.mtime),
-                              size: entry.size, directory: false, io: entry)
-            else
-              raise unsafe_error("non-regular TAR entry #{name.inspect} (type #{type.inspect})")
+            case type
+            when "L"
+              long_name = entry.read.to_s.split("\0").first.to_s.force_encoding(Encoding::UTF_8)
+              next
+            when "x"
+              path = parse_pax(entry.read)["path"]
+              pax_path = path.to_s.force_encoding(Encoding::UTF_8) unless path.nil?
+              next
+            when "g"
+              next
             end
+            name = pax_path || long_name || entry.full_name
+            pax_path = nil
+            long_name = nil
+            yield name, type, entry
           end
+        end
+      end
+
+      def parse_pax(data)
+        records = {}
+        data.to_s.each_line do |line|
+          match = /\A\d+ (.+)\z/.match(line.chomp("\n"))
+          next unless match
+
+          key, _, value = match[1].partition("=")
+          records[key] = value
+        end
+        records
+      end
+
+      # A hard link carries no bytes of its own: they live in the entry it
+      # points at. The target is looked up in a second pass so the copy keeps
+      # every path instead of dropping the link.
+      def hardlink_entry(path, format, name, entry)
+        target = entry.header.linkname.to_s
+        found = false
+        reopen_tar(path, format) do |io|
+          each_tar_entry(io) do |target_name, target_type, target_entry|
+            next unless target_name == target && (target_type == "0" || target_type == "\0")
+
+            found = true
+            yield target_entry.size, target_entry
+            break
+          end
+        end
+        return if found
+
+        raise Cvt::Errors.build(
+          "conversion_failed",
+          "TAR hard link #{name.inspect} points at a missing entry #{target.inspect}",
+          hint: "Repack the archive without hard links before converting."
+        )
+      end
+
+      def reopen_tar(path, format)
+        File.open(path, "rb") do |io|
+          yield(format.to_s == "tgz" ? GzipStream.new(io) : io)
         end
       end
 

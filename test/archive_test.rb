@@ -119,6 +119,37 @@ class ArchiveTest < Minitest::Test
     target
   end
 
+  # Raw TAR entries, used to cover header variants the rubygems writer cannot
+  # emit (GNU long names, pax headers, hard links).
+  def write_raw_tar(target, entries)
+    File.open(target, "wb") do |io|
+      entries.each do |entry|
+        data = entry[:data].to_s
+        header = Gem::Package::TarHeader.new(
+          name: entry[:name].to_s, prefix: "", mode: entry[:mode] || 0o644,
+          size: entry[:size] || data.bytesize, typeflag: entry[:typeflag] || "0",
+          linkname: entry[:linkname].to_s, mtime: ENTRY_TIME.to_i
+        ).to_s
+        io.write(header)
+        io.write(data)
+        io.write("\0" * ((512 - (data.bytesize % 512)) % 512))
+      end
+      io.write("\0" * 1024)
+    end
+    target
+  end
+
+  def write_multi_member_gz(target, parts)
+    File.open(target, "wb") do |io|
+      parts.each do |part|
+        chunk = "#{target}.part"
+        write_gz(chunk, part)
+        io.write(File.binread(chunk))
+      end
+    end
+    target
+  end
+
   def selection(format)
     Cvt::Adapters::Archive.select_tool(format)
   end
@@ -317,5 +348,81 @@ class ArchiveTest < Minitest::Test
     assert_equal "conversion_failed", error.code
     assert_match(/max-size/, error.message)
     refute File.exist?(path("big.xz"))
+  end
+
+  def test_gzip_stream_reads_every_member
+    source = write_multi_member_gz(path("multi.gz"), ["first member ", "second member"])
+    io = File.open(source, "rb")
+    begin
+      text = Cvt::Adapters::Archive::GzipStream.new(io).read
+      assert_equal "first member second member", text
+    ensure
+      io.close
+    end
+  end
+
+  def test_multi_member_gzip_survives_recompression
+    skip "bzip2 and 7-Zip are not installed" unless selection("bz2")
+    source = write_multi_member_gz(path("multi.gz"), ["first member ", "second member"])
+    output, = convert("gz", "bz2", source, path("multi.bz2"))
+
+    assert_equal "first member second member", decompress_stream(output, "bz2")
+  end
+
+  def test_truncated_gzip_is_rejected
+    source = write_gz(path("whole.gz"), "payload " * 100)
+    truncated = path("cut.gz")
+    File.binwrite(truncated, File.binread(source)[0, 20])
+    error = assert_raises(Cvt::Error) { convert("gz", "bz2", truncated, path("cut.bz2")) }
+
+    assert_equal "conversion_failed", error.code
+    assert_match(/GZIP/, error.message)
+    refute File.exist?(path("cut.bz2"))
+  end
+
+  def test_tar_with_gnu_long_name_keeps_the_real_path
+    long_name = "deep/" + (["segment"] * 30).join("/") + "/file.txt"
+    source = write_raw_tar(path("long.tar"), [
+      { name: "././@LongLink", typeflag: "L", data: "#{long_name}\0" },
+      { name: long_name[0, 100], typeflag: "0", data: "long payload" }
+    ])
+    output, = convert("tar", "zip", source, path("long.zip"))
+
+    assert_equal({ long_name => "long payload" }, zip_entries(output))
+  end
+
+  def test_tar_with_pax_header_keeps_the_real_path
+    long_name = "pax/" + (["segment"] * 30).join("/") + "/file.txt"
+    value = "path=#{long_name}\n"
+    length = value.bytesize + 3
+    length = value.bytesize + 1 + length.to_s.bytesize
+    source = write_raw_tar(path("pax.tar"), [
+      { name: "./PaxHeaders/entry", typeflag: "x", data: "#{length} #{value}" },
+      { name: "PaxHeaders/entry", typeflag: "0", data: "pax payload" }
+    ])
+    output, = convert("tar", "zip", source, path("pax.zip"))
+
+    assert_equal({ long_name => "pax payload" }, zip_entries(output))
+  end
+
+  def test_tar_with_hard_link_keeps_both_paths
+    source = write_raw_tar(path("hardlink.tar"), [
+      { name: "dir/original.txt", typeflag: "0", data: "shared content" },
+      { name: "dir/hard.txt", typeflag: "1", linkname: "dir/original.txt" }
+    ])
+    output, = convert("tar", "zip", source, path("hardlink.zip"))
+
+    entries = zip_entries(output)
+    assert_equal "shared content", entries.fetch("dir/original.txt")
+    assert_equal "shared content", entries.fetch("dir/hard.txt")
+  end
+
+  def test_bz2_format_resolves_the_native_compressor
+    skip "bzip2 is not installed" unless Cvt::Bin.find(%w[bzip2], env_var: "CVT_BIN_BZIP2")
+
+    tool = selection("bz2")
+    refute_nil tool
+    refute tool.seven_zip?
+    assert_match(/bzip2/, tool.path)
   end
 end

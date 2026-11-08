@@ -172,6 +172,42 @@ class SpreadsheetTest < Minitest::Test
     end
   end
 
+  def test_csv_to_xlsx_keeps_numeric_text_intact
+    source = File.join(@dir, "codes.csv")
+    File.write(source, "code,qty\n001,3\n10.50,4\n")
+    xlsx, = convert(source, "csv", "xlsx")
+
+    reader = Roo::Spreadsheet.open(xlsx)
+    assert_equal ["001", 3], reader.sheet(0).row(2)
+    assert_equal ["10.50", 4], reader.sheet(0).row(3)
+  end
+
+  def test_xlsx_duplicate_headers_keep_every_column
+    path = File.join(@dir, "dup.xlsx")
+    package = Axlsx::Package.new
+    package.workbook.add_worksheet(name: "Sheet1") do |sheet|
+      sheet.add_row ["name", "name"]
+      sheet.add_row ["Alice", "Bob"]
+    end
+    package.serialize(path)
+
+    csv, = convert(path, "xlsx", "csv")
+    assert_equal "name,name_2\nAlice,Bob\n", File.read(csv)
+  end
+
+  def test_sheet_named_like_a_number_can_be_selected
+    path = File.join(@dir, "years.xlsx")
+    package = Axlsx::Package.new
+    package.workbook.add_worksheet(name: "2024") do |sheet|
+      sheet.add_row ["year"]
+      sheet.add_row ["2024"]
+    end
+    package.serialize(path)
+
+    csv, = convert(path, "xlsx", "csv", "sheet" => "2024")
+    assert_equal "year\n2024\n", File.read(csv)
+  end
+
   def test_every_data_to_xlsx_route
     rows = [{ "name" => "widget", "qty" => "3" }, { "name" => "gadget", "qty" => "2" }]
     Cvt::Adapters::Data::FORMATS.each do |format|

@@ -45,6 +45,8 @@ module Cvt
           else
             reader.pages.map(&:text).join("\n")
           end
+        rescue Cvt::Error
+          raise
         rescue LoadError
           nil
         rescue StandardError => e
