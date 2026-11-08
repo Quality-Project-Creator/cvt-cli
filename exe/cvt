@@ -3,6 +3,14 @@
 
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
 
+# Standalone packages vendor their gems inside the image. The gem channel
+# never has this directory, so the check is a no-op there.
+vendor_gems = File.expand_path("../vendor/bundle/ruby/#{RbConfig::CONFIG['ruby_version']}", __dir__)
+if Dir.exist?(vendor_gems)
+  ENV["GEM_PATH"] = [vendor_gems, ENV["GEM_PATH"]].compact.reject(&:empty?).join(File::PATH_SEPARATOR)
+  Gem.clear_paths
+end
+
 require "cvt"
 
 exit Cvt::CLI.run(ARGV)

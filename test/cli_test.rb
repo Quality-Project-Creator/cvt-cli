@@ -110,7 +110,7 @@ class CliTest < Minitest::Test
     assert_equal 0, status.exitstatus
     document = parse_yaml(stdout)
     assert_equal true, document["ok"]
-    assert_equal "0.0.1-beta", document["version"]
+    assert_equal "0.1.0-beta", document["version"]
     assert_equal "version", document["operation"]
     assert_equal RUBY_VERSION, document["ruby"]
     refute_nil document["platform"]

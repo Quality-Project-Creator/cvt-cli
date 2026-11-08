@@ -55,6 +55,14 @@ and notes on the integration.
 | --- | --- | --- | --- | --- | --- |
 | libvips/libvips | https://github.com/libvips/libvips | LGPL-2.1 | shared-library | lib/cvt/backends/vips.rb, lib/cvt/adapters/image/ | Image engine loaded by the MIT ruby-vips gem through FFI from a user-installed shared library. It is not a subprocess. CVT does not bundle, modify, or distribute libvips; this is dynamic use under the standard LGPL-2.1 relinkable-shared-library conditions, and the user may replace the library with a modified build. |
 
+## Build and packaging tools
+
+| Project | Upstream URL | License | Usage mode | Notes |
+| --- | --- | --- | --- | --- |
+| tamatebako/tebako | https://github.com/tamatebako/tebako | BSD-2-Clause | build tool | Produces the standalone executables. The Tebako bootstrap loader is redistributed inside each package. |
+| matz/ruby | https://github.com/ruby/ruby | Ruby License, with GPL-2.0 alternative | redistributed runtime | The standalone executables embed a prebuilt Ruby 3.3 runtime. Only the Ruby License option is relied on. |
+| upx/upx | https://github.com/upx/upx | GPL-2.0-or-later, with the compressed-output exception | build tool | Optional post-build compression on Linux and Windows. It is applied only when it passes the size, smoke, and startup gates. |
+
 ## License compliance
 
 - No copyleft source code is copied into this project.

@@ -3,6 +3,13 @@
 A single-command file format converter. 56 formats, 13 backends, stable
 YAML output, and a predictable exit code.
 
+CVT ships in two forms:
+
+- **Standalone executables** for Linux, macOS and Windows. The Ruby
+  runtime and every conversion gem are packed inside the file, so there
+  is nothing to install or configure.
+- **A Ruby gem** (`cvt-cli`) for machines that already have Ruby.
+
 CVT does not reimplement codecs. It routes each conversion to the best
 available implementation already on your machine: native Ruby gems for
 text, data, spreadsheets, PDF, subtitles and archives, plus
@@ -11,11 +18,12 @@ LibreOffice, Calibre, Poppler and librsvg when they are installed. If an
 engine is missing, CVT reports which route is unavailable instead of
 failing halfway through a conversion.
 
-Version: `0.0.1-beta`.
+Version: `0.1.0-beta`.
 
 ## Requirements
 
-- Ruby 3.3 or newer.
+- Standalone: none. Download the file for your platform and run it.
+- Gem: Ruby 3.3 or newer.
 - Optional engines, installed per platform:
 
   | Engine | Used for | Override |
@@ -35,13 +43,36 @@ Version: `0.0.1-beta`.
 
 ## Install
 
+### Standalone (no Ruby required)
+
+Download the file for your platform from the
+[v0.1.0-beta release](https://github.com/Quality-Project-Creator/cvt-cli/releases/tag/v0.1.0-beta):
+
+| Platform | File |
+| --- | --- |
+| Linux x86_64 | `cvt-0.1.0-beta-linux-x86_64` |
+| macOS arm64 | `cvt-0.1.0-beta-macos-arm64` |
+| Windows x86_64 | `cvt-0.1.0-beta-windows-x86_64.exe` |
+
+```sh
+chmod +x cvt-0.1.0-beta-linux-x86_64
+./cvt-0.1.0-beta-linux-x86_64 --version
+```
+
+The standalone build is a self-contained Tebako package: Ruby and all
+conversion gems live inside the file and are mounted at run time, so the
+first run needs no network. Check downloads against `SHA256SUMS` on the
+release page.
+
+### Gem
+
 ```sh
 gem build cvt-cli.gemspec
-gem install ./cvt-cli-0.0.1.pre.beta.gem
+gem install ./cvt-cli-0.1.0.pre.beta.gem
 ```
 
 RubyGems normalizes the prerelease tag, so the gem reports version
-`0.0.1.pre.beta` while `cvt --version` prints `0.0.1-beta`.
+`0.1.0.pre.beta` while `cvt --version` prints `0.1.0-beta`.
 
 ## Usage
 
@@ -68,7 +99,7 @@ Every successful run prints YAML:
 
 ```yaml
 ok: true
-version: 0.0.1-beta
+version: 0.1.0-beta
 operation: convert
 input:
   path: sample.csv
@@ -124,16 +155,33 @@ cvt --category image             # filter by category
 | 8 | Timeout |
 | 130 | Interrupted |
 
+## Standalone size
+
+The standalone build is offline-first (`-m self-contained`) and optimized
+before release:
+
+- only `exe/`, `lib/`, `data/` and bundle metadata enter the image; tests,
+  CI files and development gems are excluded;
+- `limnifs` and `dwarfs` images are both built, and the smaller one is kept
+  when startup does not regress;
+- UPX is applied on Linux and Windows only when it shrinks the file by at
+  least 5%, passes `upx -t`, keeps every smoke test green, and does not slow
+  `--version` by more than 20%.
+
+Measured sizes for each release are listed in the release notes.
+
 ## Development
 
 ```sh
-bundle install
+bundle install --full-index
 bundle exec rake test        # core suite; engine-dependent tests skip
 CVT_INTEGRATION=1 bundle exec rake test
+ruby script/build_standalone.rb   # build and smoke-test the current platform
 ```
 
 CI runs the core suite on Linux, macOS and Windows with Ruby 3.3 and 3.4,
-plus an integration job on Ubuntu with engine packages installed.
+plus an integration job on Ubuntu with engine packages installed and a
+standalone build for each of the three operating systems.
 
 ## License
 

@@ -1,5 +1,7 @@
 # Build artifacts
 *.gem
+build/
+dist/
 pkg/
 coverage/
 tmp/

@@ -28,7 +28,7 @@ class CoreContractTest < Minitest::Test
   }.freeze
 
   def test_version
-    assert_equal "0.0.1-beta", Cvt::VERSION
+    assert_equal "0.1.0-beta", Cvt::VERSION
   end
 
   def test_error_codes_and_exit_codes
@@ -64,7 +64,7 @@ class CoreContractTest < Minitest::Test
     document = YAML.safe_load(yaml)
     assert_equal %w[ok version operation input output route options timing warnings], document.keys
     assert_equal true, document["ok"]
-    assert_equal "0.0.1-beta", document["version"]
+    assert_equal "0.1.0-beta", document["version"]
     assert_equal "convert", document["operation"]
     assert_equal %w[path format bytes], document["input"].keys
     assert_equal %w[path format bytes], document["output"].keys
@@ -169,7 +169,7 @@ class CoreContractTest < Minitest::Test
     assert_equal %w[ok version operation input output route options timing warnings],
                  result.to_h.keys
     assert_equal "vips", result.to_h["route"][0]["backend"]
-    assert_equal "0.0.1-beta", YAML.safe_load(result.to_yaml)["version"]
+    assert_equal "0.1.0-beta", YAML.safe_load(result.to_yaml)["version"]
   end
 
   def test_result_failure

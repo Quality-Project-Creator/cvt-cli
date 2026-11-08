@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    cvt-cli (0.0.1.pre.beta)
+    cvt-cli (0.1.0.pre.beta)
       caxlsx (>= 4.1)
       kramdown (>= 2.4)
       marcel (~> 1.0)
