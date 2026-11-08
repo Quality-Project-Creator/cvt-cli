@@ -52,7 +52,7 @@ Download the file for your platform from the
 | --- | --- | --- |
 | Linux x86_64 | `cvt-0.1.0-beta-linux-x86_64.tar.gz` | `cvt-0.1.0-beta-linux-x86_64` |
 | macOS arm64 | `cvt-0.1.0-beta-macos-arm64.tar.gz` | `cvt-0.1.0-beta-macos-arm64` |
-| Windows x86_64 | `cvt-0.1.0-beta-windows-x86_64.zip` | `cvt-0.1.0-beta-windows-x86_64.exe` |
+| Windows x86_64 | `cvt-0.1.0-beta-windows-x86_64.tar.gz` | `cvt-0.1.0-beta-windows-x86_64.exe` |
 
 ```sh
 tar -xzf cvt-0.1.0-beta-linux-x86_64.tar.gz
@@ -168,8 +168,8 @@ before release:
 - UPX is tried on Linux and Windows only when it shrinks the file by at
   least 5%, passes `upx -t`, keeps every smoke test green, and does not slow
   `--version` by more than 20%. Tebako's self-mounting packages fail the
-  post-pack verification, so releases also ship a compressed archive
-  (`.tar.gz` / `.zip`) next to the raw executable.
+  post-pack verification, so releases also ship a compressed `.tar.gz`
+  next to the raw executable.
 
 Measured sizes for each release are listed in the release notes.
 

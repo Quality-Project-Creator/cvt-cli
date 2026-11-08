@@ -263,21 +263,18 @@ def maybe_upx(binary, baseline_ms)
 end
 
 # Download size matters even when the executable itself cannot be UPX-packed.
+# tar.gz is produced with the standard library so the build does not depend
+# on the project bundle being on GEM_PATH.
 def compressed_asset(binary)
-  if Gem.win_platform?
-    require "zip"
-    archive = "#{binary}.zip"
-    FileUtils.rm_f(archive)
-    Zip::File.open(archive, create: true) { |zip| zip.add(File.basename(binary), binary) }
-  else
-    require "rubygems/package"
-    require "zlib"
-    archive = "#{binary}.tar.gz"
-    Zlib::GzipWriter.open(archive) do |gz|
-      Gem::Package::TarWriter.new(gz) do |tar|
-        tar.add_file_simple(File.basename(binary), 0o755, File.size(binary)) do |io|
-          File.open(binary, "rb") { |source| IO.copy_stream(source, io) }
-        end
+  require "rubygems/package"
+  require "zlib"
+
+  archive = "#{binary}.tar.gz"
+  FileUtils.rm_f(archive)
+  Zlib::GzipWriter.open(archive) do |gz|
+    Gem::Package::TarWriter.new(gz) do |tar|
+      tar.add_file_simple(File.basename(binary), 0o755, File.size(binary)) do |io|
+        File.open(binary, "rb") { |source| IO.copy_stream(source, io) }
       end
     end
   end

@@ -22,7 +22,7 @@ jobs:
           - os: ubuntu-22.04
             platform: linux-x86_64
             triplet: linux-gnu-x86_64
-          - os: macos-14
+          - os: macos-latest
             platform: macos-arm64
             triplet: macos-arm64
           - os: windows-latest
