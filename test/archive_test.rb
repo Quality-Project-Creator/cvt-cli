@@ -255,6 +255,31 @@ class ArchiveTest < Minitest::Test
     end
   end
 
+  def test_bz2_format_resolves_the_bzip2_tool
+    skip "bzip2 is not installed" unless Cvt::Bin.find("bzip2", env_var: "CVT_BIN_BZIP2")
+
+    tool = selection("bz2")
+    refute_nil tool, "the bz2 format must resolve to a compressor"
+    refute tool.seven_zip?, "the bz2 format must not fall back to 7-Zip when bzip2 exists"
+    assert_equal "bzip2", tool.tool
+  end
+
+  def test_bz2_route_works_without_seven_zip
+    skip "bzip2 is not installed" unless Cvt::Bin.find("bzip2", env_var: "CVT_BIN_BZIP2")
+
+    original = ENV["CVT_BIN_SEVENZIP"]
+    ENV["CVT_BIN_SEVENZIP"] = File.join(@dir, "missing-7z")
+    begin
+      source = write_gz(path("bz2body.gz"), "bzip2 body\n")
+      output, = convert("gz", "bz2", source, path("body.bz2"))
+
+      assert File.file?(output)
+      assert_equal "bzip2 body\n", decompress_stream(output, "bz2")
+    ensure
+      original.nil? ? ENV.delete("CVT_BIN_SEVENZIP") : ENV["CVT_BIN_SEVENZIP"] = original
+    end
+  end
+
   def test_rejects_parent_directory_entries
     source = write_zip(path("evil.zip"), { "../evil.txt" => "nope", "safe.txt" => "ok" })
     error = assert_raises(Cvt::Error) { convert("zip", "tgz", source, path("evil.tar.gz")) }
