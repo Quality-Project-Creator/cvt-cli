@@ -11,6 +11,7 @@ require "zip"
 
 require "cvt"
 require "cvt/adapters/archive/containers"
+require "cvt/adapters/archive/streams"
 require "cvt/adapters/archive/tools"
 
 # Task 11 coverage: container repacking (zip/tar/tgz), single-stream
@@ -116,6 +117,31 @@ class ArchiveTest < Minitest::Test
 
   def write_gz(target, content)
     Zlib::GzipWriter.open(target) { |gz| gz.write(content) }
+    target
+  end
+
+  # A gzip file may hold several concatenated members (`gzip -c a b`).
+  def write_multi_gz(target, parts)
+    File.open(target, "wb") do |io|
+      parts.each do |content|
+        gz = Zlib::GzipWriter.new(io)
+        gz.write(content)
+        gz.finish
+      end
+    end
+    target
+  end
+
+  # Writes a gzip stream whose single tar payload is split over two members.
+  def write_split_tgz(target, tar_bytes)
+    half = tar_bytes.bytesize / 2
+    File.open(target, "wb") do |io|
+      [tar_bytes.byteslice(0, half), tar_bytes.byteslice(half, tar_bytes.bytesize - half)].each do |chunk|
+        gz = Zlib::GzipWriter.new(io)
+        gz.write(chunk)
+        gz.finish
+      end
+    end
     target
   end
 
@@ -225,6 +251,35 @@ class ArchiveTest < Minitest::Test
 
     assert File.file?(output)
     assert_equal content, decompress_stream(output, "bz2")
+  end
+
+  def test_gz_decompression_keeps_every_member
+    source = write_multi_gz(path("multi.gz"), ["first member\n", "second member\n"])
+    payload = Cvt::Adapters::Streams.decompress(source, "gz", @dir, 30)
+
+    assert_equal "first member\nsecond member\n", File.read(payload)
+  end
+
+  def test_gz_with_multiple_members_survives_recompression
+    skip "xz and 7-Zip are not installed" unless selection("xz")
+
+    source = write_multi_gz(path("split.gz"), ["alpha\n", "beta\n"])
+    output, = convert("gz", "xz", source, path("split.xz"))
+
+    assert File.file?(output)
+    assert_equal "alpha\nbeta\n", decompress_stream(output, "xz")
+  end
+
+  def test_tgz_split_over_gzip_members_is_read
+    tar = path("split.tar")
+    write_tar_with(tar) do |writer|
+      writer.add_file_simple("plain/a.txt", 0o644, 5) { |out| out.write("hello") }
+      writer.add_file_simple("plain/b.txt", 0o644, 5) { |out| out.write("world") }
+    end
+    source = write_split_tgz(path("split.tgz"), File.binread(tar))
+    output, = convert("tgz", "zip", source, path("split-out.zip"))
+
+    assert_equal({ "plain/a.txt" => "hello", "plain/b.txt" => "world" }, zip_entries(output))
   end
 
   def test_xz_falls_back_to_7z_in_availability_check

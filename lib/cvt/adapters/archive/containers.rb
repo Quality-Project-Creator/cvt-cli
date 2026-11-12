@@ -61,6 +61,110 @@ module Cvt
         end
       end
 
+      # IO-like reader that spans every gzip member in a file. Zlib::GzipReader
+      # stops at the end of the first member, so a file with concatenated
+      # members (`gzip -c a b`, pigz output) would silently lose everything
+      # after the first member.
+      class GzipMembers
+        CHUNK = 64 * 1024
+
+        def initialize(path)
+          @io = File.open(path, "rb")
+          @buffer = +"".b
+          @pending = nil
+          @inflater = nil
+          @fed = 0
+          @inflated = 0
+          @members = 0
+          @produced = false
+          @done = false
+        end
+
+        def read(length = nil)
+          fill while !@done && (length.nil? || @buffer.bytesize < length)
+          return nil if @buffer.empty?
+
+          return @buffer.slice!(0, length) if length
+
+          data = @buffer
+          @buffer = +"".b
+          data
+        end
+
+        def getc
+          read(1)
+        end
+
+        def eof?
+          @buffer.empty? && @done
+        end
+
+        def pos
+          @inflated - @buffer.bytesize
+        end
+
+        def close
+          @io.close unless @io.closed?
+        end
+
+        private
+
+        def fill
+          chunk = next_chunk
+          if chunk.nil? || chunk.empty?
+            raise gzip_error("unexpected end of gzip stream") if @inflater
+            raise gzip_error("not in gzip format") if @members.zero?
+
+            @done = true
+            return
+          end
+
+          @inflater ||= Zlib::Inflate.new(Zlib::MAX_WBITS + 16)
+          before = @fed
+          @fed += chunk.bytesize
+          begin
+            data = @inflater.inflate(chunk)
+          rescue Zlib::Error => e
+            # A member that breaks after producing data is corrupt; bytes that
+            # do not start a member are trailing data behind the last member.
+            raise gzip_error(e.message) if @produced || @members.zero?
+
+            @done = true
+            return
+          end
+
+          unless data.empty?
+            @produced = true
+            @inflated += data.bytesize
+            @buffer << data
+          end
+
+          return unless @inflater.finished?
+
+          used = @inflater.total_in - before
+          leftover = chunk.bytesize - used
+          @pending = leftover.positive? ? chunk.byteslice(chunk.bytesize - leftover, leftover) : nil
+          @inflater = nil
+          @fed = 0
+          @produced = false
+          @members += 1
+        end
+
+        def next_chunk
+          if @pending
+            chunk = @pending
+            @pending = nil
+            return chunk
+          end
+
+          @io.read(CHUNK)
+        end
+
+        def gzip_error(message)
+          Zlib::GzipFile::Error.new(message)
+        end
+      end
+
       module_function
 
       def repack(input, output, from, to, options = {}, warnings = [])
@@ -115,7 +219,12 @@ module Cvt
         when "tar"
           File.open(path, "rb") { |io| read_tar(io, &block) }
         when "tgz"
-          Zlib::GzipReader.open(path) { |gz| read_tar(gz, &block) }
+          reader = GzipMembers.new(path)
+          begin
+            read_tar(reader, &block)
+          ensure
+            reader.close
+          end
         else
           raise Cvt::Errors.build(
             "unsupported_conversion",

@@ -52,9 +52,10 @@ module Cvt
         case from.to_s
         when "gz"
           written = 0
-          Zlib::GzipReader.open(input) do |gz|
+          reader = Archive::GzipMembers.new(input)
+          begin
             File.open(payload, "wb") do |out|
-              while (chunk = gz.read(CHUNK_SIZE))
+              while (chunk = reader.read(CHUNK_SIZE))
                 break if chunk.empty?
 
                 written += chunk.bytesize
@@ -63,6 +64,8 @@ module Cvt
                 out.write(chunk)
               end
             end
+          ensure
+            reader.close
           end
           payload
         when "xz", "bz2"
