@@ -28,6 +28,7 @@ module Cvt
       "librsvg" => "librsvg",
       "xz" => "xz",
       "bzip2" => "bzip2",
+      "bz2" => "bzip2",
       "7z" => "7zip",
       "7za" => "7zip",
       "7zip" => "7zip",

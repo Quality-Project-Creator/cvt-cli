@@ -13,6 +13,7 @@ module Cvt
   module Shell
     TERM_GRACE_SECONDS = 5
     DEBUG_STDERR_LIMIT = 4096
+    CHUNK_SIZE = 64 * 1024
 
     Result = Struct.new(:stdout, :stderr, :status, :timed_out, keyword_init: true) do
       def timed_out?
@@ -26,7 +27,10 @@ module Cvt
 
     module_function
 
-    def run(argv, timeout: 0, env: {}, chdir: nil)
+    # With a block, stdout is streamed to it in chunks instead of being
+    # buffered, so a caller can stop the engine early (for example when a
+    # size limit is reached) without holding the whole output in memory.
+    def run(argv, timeout: 0, env: {}, chdir: nil, &block)
       command = Array(argv).map(&:to_s)
       if command.empty?
         return Result.new(stdout: "", stderr: "", status: nil, timed_out: false)
@@ -40,12 +44,29 @@ module Cvt
       stderr = +""
       timed_out = false
       status = nil
+      stream_error = nil
 
       Open3.popen3(env, *command, **options) do |stdin, out, err, wait_thr|
         stdin.close
-        out_thread = Thread.new { out.read }
-        err_thread = Thread.new { err.read }
         pid = wait_thr.pid
+        out_thread = Thread.new do
+          if block
+            begin
+              loop { block.call(out.readpartial(CHUNK_SIZE)) }
+            rescue EOFError
+              # The engine closed stdout; the stream is complete.
+            rescue StandardError => e
+              # The consumer stopped reading: stop the engine so it cannot
+              # block on a full pipe, and report the failure to the caller.
+              stream_error = e
+              kill_process(pid, "KILL")
+            end
+            +""
+          else
+            out.read
+          end
+        end
+        err_thread = Thread.new { err.read }
         begin
           if timeout.to_f.positive?
             unless wait_thr.join(timeout.to_f)
@@ -66,14 +87,16 @@ module Cvt
         status = wait_thr.value
       end
 
+      raise stream_error if stream_error
+
       Result.new(stdout: stdout, stderr: stderr, status: status, timed_out: timed_out)
     rescue Errno::ENOENT => e
       Result.new(stdout: "", stderr: e.message, status: nil, timed_out: false)
     end
 
     # Convenience wrapper for engines that want a Cvt::Error on failure.
-    def run!(argv, timeout: 0, env: {}, chdir: nil)
-      result = run(argv, timeout: timeout, env: env, chdir: chdir)
+    def run!(argv, timeout: 0, env: {}, chdir: nil, &block)
+      result = run(argv, timeout: timeout, env: env, chdir: chdir, &block)
       if result.timed_out?
         raise Cvt::Errors.build(
           "timeout",

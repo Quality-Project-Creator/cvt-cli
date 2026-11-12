@@ -11,6 +11,7 @@ require "zip"
 
 require "cvt"
 require "cvt/adapters/archive/containers"
+require "cvt/adapters/archive/streams"
 require "cvt/adapters/archive/tools"
 
 # Task 11 coverage: container repacking (zip/tar/tgz), single-stream
@@ -119,6 +120,81 @@ class ArchiveTest < Minitest::Test
     target
   end
 
+  # Builds compressed fixtures with the same tools the product uses.
+  def write_xz(target, content)
+    source = write_gz("#{target}.source.gz", content)
+    convert("gz", "xz", source, target).first
+    target
+  end
+
+  def write_bz2(target, content)
+    source = write_gz("#{target}.source.gz", content)
+    convert("gz", "bz2", source, target).first
+    target
+  end
+
+  # A gzip file may hold several concatenated members (`gzip -c a b`).
+  def write_multi_gz(target, parts)
+    File.open(target, "wb") do |io|
+      parts.each do |content|
+        gz = Zlib::GzipWriter.new(io)
+        gz.write(content)
+        gz.finish
+      end
+    end
+    target
+  end
+
+  # Writes a gzip stream whose single tar payload is split over two members.
+  def write_split_tgz(target, tar_bytes)
+    half = tar_bytes.bytesize / 2
+    File.open(target, "wb") do |io|
+      [tar_bytes.byteslice(0, half), tar_bytes.byteslice(half, tar_bytes.bytesize - half)].each do |chunk|
+        gz = Zlib::GzipWriter.new(io)
+        gz.write(chunk)
+        gz.finish
+      end
+    end
+    target
+  end
+
+  # GNU tar keeps paths longer than 100 bytes in a separate "L" entry that
+  # names the entry that follows.
+  def write_long_name_tar(target, name, content)
+    File.open(target, "wb") do |io|
+      long = "#{name}\0"
+      io.write tar_header("././@LongLink", long.bytesize, "L")
+      io.write long
+      io.write("\0" * ((512 - (long.bytesize % 512)) % 512))
+      io.write tar_header(name[0, 100], content.bytesize, "0")
+      io.write content
+      io.write("\0" * ((512 - (content.bytesize % 512)) % 512))
+    end
+    target
+  end
+
+  # pax archives keep the long path in an "x" extended header instead.
+  def write_pax_tar(target, name, content)
+    File.open(target, "wb") do |io|
+      body = "path=#{name}\n"
+      digits = 1
+      digits += 1 while (body.bytesize + digits + 1).to_s.length != digits
+      record = "#{body.bytesize + digits + 1} #{body}"
+      io.write tar_header("PaxHeaders/entry", record.bytesize, "x")
+      io.write record
+      io.write("\0" * ((512 - (record.bytesize % 512)) % 512))
+      io.write tar_header(name[0, 100], content.bytesize, "0")
+      io.write content
+      io.write("\0" * ((512 - (content.bytesize % 512)) % 512))
+    end
+    target
+  end
+
+  def tar_header(name, size, typeflag)
+    Gem::Package::TarHeader.new(name: name, mode: 0o644, size: size, prefix: "",
+                                 typeflag: typeflag).to_s
+  end
+
   def selection(format)
     Cvt::Adapters::Archive.select_tool(format)
   end
@@ -207,6 +283,32 @@ class ArchiveTest < Minitest::Test
     assert_equal "zipdata", tar_entries(plain_tar).fetch("file.txt").first
   end
 
+  def test_tar_with_gnu_long_names_is_read
+    name = "#{"long_directory/" * 8}file.txt"
+    source = write_long_name_tar(path("long.tar"), name, "hello")
+    output, = convert("tar", "zip", source, path("long.zip"))
+
+    assert_equal({ name => "hello" }, zip_entries(output))
+  end
+
+  def test_tar_with_pax_long_names_is_read
+    name = "#{"long_directory/" * 8}file.txt"
+    source = write_pax_tar(path("pax.tar"), name, "hello")
+    output, = convert("tar", "zip", source, path("pax.zip"))
+
+    assert_equal({ name => "hello" }, zip_entries(output))
+  end
+
+  def test_tar_long_name_cannot_escape_the_output
+    source = write_long_name_tar(path("escape.tar"), "../escaped.txt", "nope")
+    error = assert_raises(Cvt::Error) do
+      convert("tar", "zip", source, path("escape.zip"))
+    end
+
+    assert_equal "unsafe_archive", error.code
+    refute File.exist?(path("escape.zip"))
+  end
+
   def test_gz_to_xz_when_available
     skip "xz and 7-Zip are not installed" unless selection("xz")
     content = "compress me " * 512
@@ -225,6 +327,35 @@ class ArchiveTest < Minitest::Test
 
     assert File.file?(output)
     assert_equal content, decompress_stream(output, "bz2")
+  end
+
+  def test_gz_decompression_keeps_every_member
+    source = write_multi_gz(path("multi.gz"), ["first member\n", "second member\n"])
+    payload = Cvt::Adapters::Streams.decompress(source, "gz", @dir, 30)
+
+    assert_equal "first member\nsecond member\n", File.read(payload)
+  end
+
+  def test_gz_with_multiple_members_survives_recompression
+    skip "xz and 7-Zip are not installed" unless selection("xz")
+
+    source = write_multi_gz(path("split.gz"), ["alpha\n", "beta\n"])
+    output, = convert("gz", "xz", source, path("split.xz"))
+
+    assert File.file?(output)
+    assert_equal "alpha\nbeta\n", decompress_stream(output, "xz")
+  end
+
+  def test_tgz_split_over_gzip_members_is_read
+    tar = path("split.tar")
+    write_tar_with(tar) do |writer|
+      writer.add_file_simple("plain/a.txt", 0o644, 5) { |out| out.write("hello") }
+      writer.add_file_simple("plain/b.txt", 0o644, 5) { |out| out.write("world") }
+    end
+    source = write_split_tgz(path("split.tgz"), File.binread(tar))
+    output, = convert("tgz", "zip", source, path("split-out.zip"))
+
+    assert_equal({ "plain/a.txt" => "hello", "plain/b.txt" => "world" }, zip_entries(output))
   end
 
   def test_xz_falls_back_to_7z_in_availability_check
@@ -250,6 +381,96 @@ class ArchiveTest < Minitest::Test
     begin
       convert("gz", "xz", source, output)
       assert_equal content, decompress_stream(output, "xz")
+    ensure
+      original.nil? ? ENV.delete("CVT_BIN_XZ") : ENV["CVT_BIN_XZ"] = original
+    end
+  end
+
+  def test_bz2_format_resolves_the_bzip2_tool
+    skip "bzip2 is not installed" unless Cvt::Bin.find("bzip2", env_var: "CVT_BIN_BZIP2")
+
+    tool = selection("bz2")
+    refute_nil tool, "the bz2 format must resolve to a compressor"
+    refute tool.seven_zip?, "the bz2 format must not fall back to 7-Zip when bzip2 exists"
+    assert_equal "bzip2", tool.tool
+  end
+
+  def test_bz2_route_works_without_seven_zip
+    skip "bzip2 is not installed" unless Cvt::Bin.find("bzip2", env_var: "CVT_BIN_BZIP2")
+
+    original = ENV["CVT_BIN_SEVENZIP"]
+    ENV["CVT_BIN_SEVENZIP"] = File.join(@dir, "missing-7z")
+    begin
+      source = write_gz(path("bz2body.gz"), "bzip2 body\n")
+      output, = convert("gz", "bz2", source, path("body.bz2"))
+
+      assert File.file?(output)
+      assert_equal "bzip2 body\n", decompress_stream(output, "bz2")
+    ensure
+      original.nil? ? ENV.delete("CVT_BIN_SEVENZIP") : ENV["CVT_BIN_SEVENZIP"] = original
+    end
+  end
+
+  # The size limit must stop the decompression while it runs: a payload that
+  # expands far past the limit must never reach the disk in full.
+  def test_xz_to_gz_round_trip
+    skip "xz and 7-Zip are not installed" unless selection("xz")
+
+    content = "round trip payload " * 512
+    source = write_xz(path("round.xz"), content)
+    output, = convert("xz", "gz", source, path("round.gz"))
+
+    assert File.file?(output)
+    assert_equal content, Zlib::GzipReader.open(output) { |gz| gz.read }
+  end
+
+  def test_xz_decompression_stops_at_the_size_limit
+    skip "xz and 7-Zip are not installed" unless selection("xz")
+
+    source = write_xz(path("bomb.xz"), "expanded payload " * 4096)
+    error = assert_raises(Cvt::Error) do
+      Cvt::Adapters::Streams.decompress(source, "xz", @dir, 30, 1024)
+    end
+
+    assert_equal "conversion_failed", error.code
+    assert_match(/max-size/, error.message)
+    assert_operator File.size(File.join(@dir, "payload")), :<=, 1024,
+                    "decompression must stop at the limit instead of writing the whole payload"
+  end
+
+  def test_bz2_decompression_stops_at_the_size_limit
+    skip "bzip2 and 7-Zip are not installed" unless selection("bz2")
+
+    source = write_bz2(path("bomb.bz2"), "expanded payload " * 4096)
+    error = assert_raises(Cvt::Error) do
+      Cvt::Adapters::Streams.decompress(source, "bz2", @dir, 30, 1024)
+    end
+
+    assert_equal "conversion_failed", error.code
+    assert_match(/max-size/, error.message)
+    assert_operator File.size(File.join(@dir, "payload")), :<=, 1024,
+                    "decompression must stop at the limit instead of writing the whole payload"
+  end
+
+  def test_seven_zip_decompression_stops_at_the_size_limit
+    return unless selection("7z")
+    skip "xz is not installed" unless Cvt::Bin.find("xz", env_var: "CVT_BIN_XZ")
+
+    source = write_xz(path("bomb7z.xz"), "expanded payload " * 4096)
+    original = ENV["CVT_BIN_XZ"]
+    ENV["CVT_BIN_XZ"] = File.join(@dir, "missing-xz")
+    begin
+      payload = Cvt::Adapters::Streams.decompress(source, "xz", @dir, 30)
+      assert_equal "expanded payload " * 4096, File.read(payload)
+
+      error = assert_raises(Cvt::Error) do
+        Cvt::Adapters::Streams.decompress(source, "xz", @dir, 30, 1024)
+      end
+
+      assert_equal "conversion_failed", error.code
+      assert_match(/max-size/, error.message)
+      assert_operator File.size(File.join(@dir, "payload")), :<=, 1024,
+                      "decompression must stop at the limit instead of writing the whole payload"
     ensure
       original.nil? ? ENV.delete("CVT_BIN_XZ") : ENV["CVT_BIN_XZ"] = original
     end

@@ -18,6 +18,11 @@ module Cvt
         "7z" => { names: %w[7z 7za 7zz], env_var: "CVT_BIN_SEVENZIP" }
       }.freeze
 
+      # Format ids whose tool is named differently ("bz2" is produced by the
+      # bzip2 binary). Without this mapping the bz2 routes could not find
+      # bzip2 and only worked when 7-Zip happened to be installed.
+      FORMAT_TOOLS = { "bz2" => "bzip2" }.freeze
+
       Selection = Struct.new(:tool, :path, keyword_init: true) do
         def seven_zip?
           tool == "7z"
@@ -26,8 +31,13 @@ module Cvt
 
       module_function
 
+      # Maps a format id to the tool that produces it.
+      def tool_name(name)
+        FORMAT_TOOLS.fetch(name.to_s, name.to_s)
+      end
+
       def tool_path(name)
-        spec = TOOL_SPECS[name.to_s]
+        spec = TOOL_SPECS[tool_name(name)]
         return nil unless spec
 
         Cvt::Bin.find(spec[:names], env_var: spec[:env_var])
@@ -37,7 +47,7 @@ module Cvt
       # preferring the native binary and falling back to 7-Zip.
       def select_tool(name)
         direct = tool_path(name)
-        return Selection.new(tool: name.to_s, path: direct) if direct
+        return Selection.new(tool: tool_name(name), path: direct) if direct
 
         fallback = tool_path("7z")
         fallback && Selection.new(tool: "7z", path: fallback)
@@ -45,7 +55,7 @@ module Cvt
 
       def requirements_available?(requirements)
         Array(requirements).all? do |name|
-          next false unless TOOL_SPECS.key?(name.to_s)
+          next false unless TOOL_SPECS.key?(tool_name(name))
 
           !select_tool(name).nil?
         end

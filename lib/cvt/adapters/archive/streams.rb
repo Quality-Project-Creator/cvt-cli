@@ -52,9 +52,10 @@ module Cvt
         case from.to_s
         when "gz"
           written = 0
-          Zlib::GzipReader.open(input) do |gz|
+          reader = Archive::GzipMembers.new(input)
+          begin
             File.open(payload, "wb") do |out|
-              while (chunk = gz.read(CHUNK_SIZE))
+              while (chunk = reader.read(CHUNK_SIZE))
                 break if chunk.empty?
 
                 written += chunk.bytesize
@@ -63,6 +64,8 @@ module Cvt
                 out.write(chunk)
               end
             end
+          ensure
+            reader.close
           end
           payload
         when "xz", "bz2"
@@ -71,20 +74,22 @@ module Cvt
 
           copy_path = File.join(dir, "source#{EXTENSIONS.fetch(from.to_s)}")
           FileUtils.cp(input, copy_path)
-          if selection.seven_zip?
-            Cvt::Shell.run!(seven_extract_argv(selection, copy_path, dir), timeout: timeout)
-          else
-            Cvt::Shell.run!([selection.path, "-d", "-f", "-k", copy_path], timeout: timeout)
+          argv = if selection.seven_zip?
+                   [selection.path, "x", "-so", copy_path]
+                 else
+                   [selection.path, "-dc", copy_path]
+                 end
+          # The payload is streamed instead of written by the engine so the
+          # size limit stops the decompression while it runs.
+          written = 0
+          File.open(payload, "wb") do |out|
+            Cvt::Shell.run!(argv, timeout: timeout) do |chunk|
+              written += chunk.bytesize
+              raise size_error if max_size.positive? && written > max_size
+
+              out.write(chunk)
+            end
           end
-          extracted = File.join(dir, "source")
-          unless File.file?(extracted)
-            raise Cvt::Errors.build(
-              "conversion_failed",
-              "Unable to decompress #{from} stream",
-              hint: "Check that the input file is a valid #{from} file."
-            )
-          end
-          FileUtils.mv(extracted, payload, force: true)
           payload
         else
           raise unsupported_error(from, "decompress")
@@ -147,10 +152,6 @@ module Cvt
 
           destination.write(chunk)
         end
-      end
-
-      def seven_extract_argv(selection, path, dir)
-        [selection.path, "x", "-y", "-o#{dir}", path]
       end
 
       def unsupported_error(format, action)
