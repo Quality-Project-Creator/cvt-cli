@@ -275,14 +275,35 @@ module Cvt
       end
 
       def read_tar(io)
+        pending_name = nil
+        pending_size = nil
         Gem::Package::TarReader.new(io) do |tar|
           tar.each do |entry|
-            name = entry.full_name
             type = entry.header.typeflag
+            if type == "L"
+              # GNU long name: the path of the entry that follows.
+              pending_name = entry.read.split("\0", 2).first
+              next
+            elsif type == "x" || type == "g"
+              # pax extended header: metadata for the entry that follows.
+              records = pax_records(entry.read)
+              pending_name = records["path"] || pending_name
+              pending_size = records["size"]&.to_i || pending_size
+              next
+            end
+
+            name = (pending_name || entry.full_name).to_s.dup.force_encoding(Encoding::UTF_8)
+            declared_size = pending_size
+            pending_name = nil
+            pending_size = nil
             if type == "5"
               yield Entry.new(name: name, mode: entry.header.mode, mtime: time_from(entry.header.mtime),
                               size: 0, directory: true)
             elsif type == "0" || type == "\0"
+              if declared_size && declared_size != entry.size
+                raise tar_size_error(name, declared_size)
+              end
+
               yield Entry.new(name: name, mode: entry.header.mode, mtime: time_from(entry.header.mtime),
                               size: entry.size, directory: false, io: entry)
             else
@@ -290,6 +311,29 @@ module Cvt
             end
           end
         end
+      end
+
+      # pax extended headers hold "key=value" records, each prefixed with its
+      # byte length ("150 path=...").
+      def pax_records(content)
+        records = {}
+        text = content.to_s.b
+        offset = 0
+        while offset < text.bytesize
+          space = text.index(" ", offset)
+          break unless space
+
+          length = text.byteslice(offset, space - offset).to_i
+          break if length <= 0
+
+          record = text.byteslice(space + 1, length - (space - offset) - 2)
+          break if record.nil?
+
+          key, separator, value = record.partition("=")
+          records[key] = value unless separator.empty?
+          offset += length
+        end
+        records
       end
 
       def write_zip(zip, entry)
@@ -363,6 +407,14 @@ module Cvt
           "unsafe_archive",
           "Archive contains an unsafe entry: #{reason}".delete("\n"),
           hint: "Remove absolute paths, '..' references, symlinks, and device files before converting."
+        )
+      end
+
+      def tar_size_error(name, size)
+        Cvt::Errors.build(
+          "conversion_failed",
+          "TAR entry #{name.to_s.delete("\n").inspect} declares #{size} bytes that its header cannot hold",
+          hint: "Split the entry into smaller files before converting."
         )
       end
 

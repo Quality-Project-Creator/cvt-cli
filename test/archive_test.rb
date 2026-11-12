@@ -145,6 +145,43 @@ class ArchiveTest < Minitest::Test
     target
   end
 
+  # GNU tar keeps paths longer than 100 bytes in a separate "L" entry that
+  # names the entry that follows.
+  def write_long_name_tar(target, name, content)
+    File.open(target, "wb") do |io|
+      long = "#{name}\0"
+      io.write tar_header("././@LongLink", long.bytesize, "L")
+      io.write long
+      io.write("\0" * ((512 - (long.bytesize % 512)) % 512))
+      io.write tar_header(name[0, 100], content.bytesize, "0")
+      io.write content
+      io.write("\0" * ((512 - (content.bytesize % 512)) % 512))
+    end
+    target
+  end
+
+  # pax archives keep the long path in an "x" extended header instead.
+  def write_pax_tar(target, name, content)
+    File.open(target, "wb") do |io|
+      body = "path=#{name}\n"
+      digits = 1
+      digits += 1 while (body.bytesize + digits + 1).to_s.length != digits
+      record = "#{body.bytesize + digits + 1} #{body}"
+      io.write tar_header("PaxHeaders/entry", record.bytesize, "x")
+      io.write record
+      io.write("\0" * ((512 - (record.bytesize % 512)) % 512))
+      io.write tar_header(name[0, 100], content.bytesize, "0")
+      io.write content
+      io.write("\0" * ((512 - (content.bytesize % 512)) % 512))
+    end
+    target
+  end
+
+  def tar_header(name, size, typeflag)
+    Gem::Package::TarHeader.new(name: name, mode: 0o644, size: size, prefix: "",
+                                 typeflag: typeflag).to_s
+  end
+
   def selection(format)
     Cvt::Adapters::Archive.select_tool(format)
   end
@@ -231,6 +268,32 @@ class ArchiveTest < Minitest::Test
     zip = write_zip(path("plain2.zip"), { "file.txt" => "zipdata" })
     plain_tar, = convert("zip", "tar", zip, path("plain2.tar"))
     assert_equal "zipdata", tar_entries(plain_tar).fetch("file.txt").first
+  end
+
+  def test_tar_with_gnu_long_names_is_read
+    name = "#{"long_directory/" * 8}file.txt"
+    source = write_long_name_tar(path("long.tar"), name, "hello")
+    output, = convert("tar", "zip", source, path("long.zip"))
+
+    assert_equal({ name => "hello" }, zip_entries(output))
+  end
+
+  def test_tar_with_pax_long_names_is_read
+    name = "#{"long_directory/" * 8}file.txt"
+    source = write_pax_tar(path("pax.tar"), name, "hello")
+    output, = convert("tar", "zip", source, path("pax.zip"))
+
+    assert_equal({ name => "hello" }, zip_entries(output))
+  end
+
+  def test_tar_long_name_cannot_escape_the_output
+    source = write_long_name_tar(path("escape.tar"), "../escaped.txt", "nope")
+    error = assert_raises(Cvt::Error) do
+      convert("tar", "zip", source, path("escape.zip"))
+    end
+
+    assert_equal "unsafe_archive", error.code
+    refute File.exist?(path("escape.zip"))
   end
 
   def test_gz_to_xz_when_available
