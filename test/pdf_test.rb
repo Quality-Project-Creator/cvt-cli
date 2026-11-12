@@ -171,6 +171,23 @@ class PdfTest < Minitest::Test
     end
   end
 
+  def test_pdf_to_txt_reports_out_of_range_page
+    skip "prawn is unavailable" unless prawn_available?
+    skip "pdf-reader is unavailable" unless reader_available?
+
+    Dir.mktmpdir("cvt-pdf") do |dir|
+      input = two_page_pdf(dir)
+      output = File.join(dir, "missing-page.txt")
+      error = assert_raises(Cvt::Error) do
+        @pdf.convert(input, output, options("pdf", "txt", "page" => 9), [])
+      end
+
+      assert_equal "conversion_failed", error.code
+      assert_match(/page 9 does not exist/, error.message)
+      refute File.exist?(output)
+    end
+  end
+
   def test_damaged_pdf_fails_without_output
     Dir.mktmpdir("cvt-pdf") do |dir|
       input = File.join(dir, "damaged.pdf")

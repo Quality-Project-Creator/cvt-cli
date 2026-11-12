@@ -47,6 +47,10 @@ module Cvt
           end
         rescue LoadError
           nil
+        rescue Cvt::Error
+          # Deliberate failures (an out-of-range page) must not be swallowed
+          # by the Poppler fallback: they report the real problem.
+          raise
         rescue StandardError => e
           raise Poppler.protected_error if encrypted?(e)
 
