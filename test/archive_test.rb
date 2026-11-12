@@ -120,6 +120,19 @@ class ArchiveTest < Minitest::Test
     target
   end
 
+  # Builds compressed fixtures with the same tools the product uses.
+  def write_xz(target, content)
+    source = write_gz("#{target}.source.gz", content)
+    convert("gz", "xz", source, target).first
+    target
+  end
+
+  def write_bz2(target, content)
+    source = write_gz("#{target}.source.gz", content)
+    convert("gz", "bz2", source, target).first
+    target
+  end
+
   # A gzip file may hold several concatenated members (`gzip -c a b`).
   def write_multi_gz(target, parts)
     File.open(target, "wb") do |io|
@@ -395,6 +408,57 @@ class ArchiveTest < Minitest::Test
       assert_equal "bzip2 body\n", decompress_stream(output, "bz2")
     ensure
       original.nil? ? ENV.delete("CVT_BIN_SEVENZIP") : ENV["CVT_BIN_SEVENZIP"] = original
+    end
+  end
+
+  # The size limit must stop the decompression while it runs: a payload that
+  # expands far past the limit must never reach the disk in full.
+  def test_xz_decompression_stops_at_the_size_limit
+    skip "xz and 7-Zip are not installed" unless selection("xz")
+
+    source = write_xz(path("bomb.xz"), "expanded payload " * 4096)
+    error = assert_raises(Cvt::Error) do
+      Cvt::Adapters::Streams.decompress(source, "xz", @dir, 30, 1024)
+    end
+
+    assert_equal "conversion_failed", error.code
+    assert_match(/max-size/, error.message)
+    assert_operator File.size(File.join(@dir, "payload")), :<=, 1024,
+                    "decompression must stop at the limit instead of writing the whole payload"
+  end
+
+  def test_bz2_decompression_stops_at_the_size_limit
+    skip "bzip2 and 7-Zip are not installed" unless selection("bz2")
+
+    source = write_bz2(path("bomb.bz2"), "expanded payload " * 4096)
+    error = assert_raises(Cvt::Error) do
+      Cvt::Adapters::Streams.decompress(source, "bz2", @dir, 30, 1024)
+    end
+
+    assert_equal "conversion_failed", error.code
+    assert_match(/max-size/, error.message)
+    assert_operator File.size(File.join(@dir, "payload")), :<=, 1024,
+                    "decompression must stop at the limit instead of writing the whole payload"
+  end
+
+  def test_seven_zip_decompression_stops_at_the_size_limit
+    return unless selection("7z")
+    skip "xz is not installed" unless Cvt::Bin.find("xz", env_var: "CVT_BIN_XZ")
+
+    source = write_xz(path("bomb7z.xz"), "expanded payload " * 4096)
+    original = ENV["CVT_BIN_XZ"]
+    ENV["CVT_BIN_XZ"] = File.join(@dir, "missing-xz")
+    begin
+      error = assert_raises(Cvt::Error) do
+        Cvt::Adapters::Streams.decompress(source, "xz", @dir, 30, 1024)
+      end
+
+      assert_equal "conversion_failed", error.code
+      assert_match(/max-size/, error.message)
+      assert_operator File.size(File.join(@dir, "payload")), :<=, 1024,
+                      "decompression must stop at the limit instead of writing the whole payload"
+    ensure
+      original.nil? ? ENV.delete("CVT_BIN_XZ") : ENV["CVT_BIN_XZ"] = original
     end
   end
 
