@@ -413,6 +413,17 @@ class ArchiveTest < Minitest::Test
 
   # The size limit must stop the decompression while it runs: a payload that
   # expands far past the limit must never reach the disk in full.
+  def test_xz_to_gz_round_trip
+    skip "xz and 7-Zip are not installed" unless selection("xz")
+
+    content = "round trip payload " * 512
+    source = write_xz(path("round.xz"), content)
+    output, = convert("xz", "gz", source, path("round.gz"))
+
+    assert File.file?(output)
+    assert_equal content, Zlib::GzipReader.open(output) { |gz| gz.read }
+  end
+
   def test_xz_decompression_stops_at_the_size_limit
     skip "xz and 7-Zip are not installed" unless selection("xz")
 
@@ -449,6 +460,9 @@ class ArchiveTest < Minitest::Test
     original = ENV["CVT_BIN_XZ"]
     ENV["CVT_BIN_XZ"] = File.join(@dir, "missing-xz")
     begin
+      payload = Cvt::Adapters::Streams.decompress(source, "xz", @dir, 30)
+      assert_equal "expanded payload " * 4096, File.read(payload)
+
       error = assert_raises(Cvt::Error) do
         Cvt::Adapters::Streams.decompress(source, "xz", @dir, 30, 1024)
       end
