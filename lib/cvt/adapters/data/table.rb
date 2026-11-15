@@ -165,6 +165,24 @@ module Cvt
         end
       end
 
+      # Header names must be unique: a file with two "name" columns would
+      # otherwise lose one of them when the row becomes a Hash. Repeated names
+      # get a numeric suffix that skips names already taken.
+      def unique_headers(names)
+        used = {}
+        names.map do |name|
+          base = name.to_s
+          candidate = base
+          index = 1
+          while used.key?(candidate)
+            index += 1
+            candidate = "#{base}_#{index}"
+          end
+          used[candidate] = true
+          candidate
+        end
+      end
+
       def read_text(path, options = {})
         enforce_size!(path, options)
         bytes = File.binread(path)
@@ -248,8 +266,9 @@ module Cvt
       def parse_delimited(content, separator)
         table = CSV.parse(content, headers: true, col_sep: separator, row_sep: :auto,
                                    skip_blanks: true)
+        names = unique_headers(table.headers)
         table.map do |row|
-          values = stringify_keys(row.to_h)
+          values = names.each_with_index.to_h { |name, index| [name, row.fields[index]] }
           values.each { |key, value| values[key] = "" if value.nil? }
           values
         end
@@ -279,6 +298,9 @@ module Cvt
       rescue Psych::Exception => e
         raise conversion_error("Invalid YAML: #{first_line(e.message)}",
                                hint: "Use a single YAML document with plain mappings or sequences.")
+      rescue SystemStackError
+        raise conversion_error("Invalid YAML: the document is nested too deeply",
+                               hint: "Reduce the nesting depth of the YAML document.")
       end
 
       def ensure_single_yaml_document!(content)

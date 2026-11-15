@@ -30,6 +30,9 @@ module Cvt
     SNIFF_BYTES = 128 * 1024
     RAW_SEARCH_BYTES = 64 * 1024
     MIN_TEXT_CONFIDENCE = 0.5
+    # The EPUB "mimetype" entry is a short header line; nothing else is read
+    # from inside an archive during detection.
+    ZIP_ENTRY_READ_LIMIT = 256
 
     ODF_MIMES = {
       "application/vnd.oasis.opendocument.text" => "odt",
@@ -187,7 +190,11 @@ module Cvt
       content = nil
       Zip::File.open(path) do |zip|
         entry = zip.find_entry(name)
-        content = entry.get_input_stream.read if entry
+        # Only the entry header is inspected (the EPUB mimetype), so the read
+        # is capped: a small archive must not expand into gigabytes of RAM.
+        # The block form closes the entry stream: an open handle keeps the
+        # archive locked, which stops Windows from deleting or replacing it.
+        entry.get_input_stream { |io| content = io.read(ZIP_ENTRY_READ_LIMIT) } if entry
       end
       content
     rescue LoadError, StandardError
@@ -324,6 +331,10 @@ module Cvt
       structure = begin
         Psych.safe_load(text, permitted_classes: [Date, Time], aliases: true)
       rescue StandardError
+        nil
+      rescue SystemStackError
+        # Deeply nested flow collections overflow the parser stack; that is a
+        # failed sniff, never a reason to abort the whole run.
         nil
       end
       return 0.96 if document_marker && (structure.is_a?(Hash) || structure.is_a?(Array))

@@ -54,6 +54,12 @@ class SubtitleTest < Minitest::Test
     error
   end
 
+  def test_input_encoding_option_is_honoured
+    latin = "1\n00:00:01,000 --> 00:00:02,000\nH\xE9llo\n\n"
+    output, = convert("srt", "vtt", latin, "encoding" => "ISO-8859-1")
+    assert_includes output, "Héllo"
+  end
+
   def test_availability_covers_all_pairs
     formats = %w[srt vtt ass]
     formats.product(formats).each do |from, to|

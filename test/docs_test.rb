@@ -311,6 +311,18 @@ class DocsTest < Minitest::Test
     assert zip_entry(xlsx, "xl/workbook.xml"), "XLSX must contain xl/workbook.xml"
   end
 
+  def test_libreoffice_csv_delimiter_is_honoured
+    backend = libreoffice
+    csv = fixture("semicolon.csv", "a;b;c\n1;2;3\n")
+    ods = File.join(@dir, "semicolon.ods")
+
+    convert(backend, "csv", "ods", csv, ods, "delimiter" => ";")
+
+    row = zip_entry(ods, "content.xml")[/<table:table-row.*?<\/table:table-row>/m]
+    refute_nil row
+    assert_equal 3, row.scan("<table:table-cell").size
+  end
+
   def test_libreoffice_xlsx_to_ods
     backend = libreoffice
     xlsx = make_xlsx

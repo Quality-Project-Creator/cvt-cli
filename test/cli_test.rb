@@ -215,6 +215,22 @@ class CliTest < Minitest::Test
     assert_equal "", clean_stderr(stderr)
   end
 
+  def test_doctor_reports_a_missing_native_gem_instead_of_crashing
+    original = Gem::Specification.method(:find_by_name)
+    document = nil
+    Gem::Specification.stub(:find_by_name, lambda { |name, *rest|
+      raise Gem::MissingSpecError.new(name, ">= 0") if name == "nokogiri"
+
+      original.call(name, *rest)
+    }) do
+      document = Cvt::Doctor.new.document
+    end
+
+    nokogiri = document["native_dependencies"].find { |entry| entry["name"] == "nokogiri" }
+    refute_nil nokogiri
+    assert_equal false, nokogiri["available"]
+  end
+
   def test_unknown_option_is_a_usage_error_yaml
     stdout, stderr, status = run_exe("--nope")
     assert_equal 2, status.exitstatus

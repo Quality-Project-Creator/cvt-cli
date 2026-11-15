@@ -33,7 +33,7 @@ module Cvt
 
       module_function
 
-      def convert(input, output, from, to, warnings = [])
+      def convert(input, output, from, to, warnings = [], options = {})
         unless FORMATS.include?(from.to_s) && FORMATS.include?(to.to_s) && from.to_s != to.to_s
           raise Cvt::Errors.build(
             "unsupported_conversion",
@@ -42,7 +42,7 @@ module Cvt
           )
         end
 
-        cues = read(input, from, warnings)
+        cues = read(input, from, warnings, options)
         validate!(cues)
         if from.to_s == "ass"
           warnings << {
@@ -54,8 +54,8 @@ module Cvt
         warnings
       end
 
-      def read(path, format, warnings = [])
-        text = read_text(path)
+      def read(path, format, warnings = [], options = {})
+        text = read_text(path, options)
         cues = case format.to_s
                when "srt" then parse_srt(text)
                when "vtt" then parse_vtt(text, warnings)
@@ -88,17 +88,27 @@ module Cvt
         raise invalid_error("Unable to write subtitle output: #{e.message}")
       end
 
-      def read_text(path)
+      def read_text(path, options = {})
         raw = File.binread(path)
-        text = raw.dup.force_encoding(Encoding::UTF_8)
+        encoding_name = options["encoding"].to_s
+        encoding_name = "UTF-8" if encoding_name.empty?
+        source = Encoding.find(encoding_name)
+        text = raw.dup.force_encoding(source)
         unless text.valid_encoding?
           raise Cvt::Errors.build(
             "conversion_failed",
-            "Subtitle file is not valid UTF-8",
-            hint: "Save the subtitle file as UTF-8 and retry."
+            "Subtitle file is not valid #{encoding_name}",
+            hint: "Save the subtitle file as #{encoding_name} or pass --encoding with the " \
+                  "file's actual encoding."
           )
         end
-        text.delete_prefix("\uFEFF").gsub("\r\n", "\n").gsub("\r", "\n")
+        text.encode(Encoding::UTF_8).delete_prefix("\uFEFF").gsub("\r\n", "\n").gsub("\r", "\n")
+      rescue ArgumentError
+        raise Cvt::Errors.build(
+          "conversion_failed",
+          "Unknown input encoding: #{encoding_name}",
+          hint: "Pass --encoding with a valid encoding name such as UTF-8."
+        )
       rescue SystemCallError => e
         raise invalid_error("Unable to read subtitle input: #{e.message}")
       end

@@ -126,6 +126,7 @@ module Cvt
             name = header_values[index].to_s.strip
             name.empty? ? "column#{index + 1}" : name
           end
+          headers = Data.unique_headers(headers)
 
           (2..last_row).map do |number|
             values = Array(sheet.row(number))

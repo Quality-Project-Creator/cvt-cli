@@ -224,4 +224,17 @@ class SpreadsheetTest < Minitest::Test
     assert_equal "input_protected", error.code
     assert_match(/password/, error.hint)
   end
+
+  def test_duplicate_headers_keep_every_column
+    path = File.join(@dir, "duplicate.xlsx")
+    package = Axlsx::Package.new
+    package.workbook.add_worksheet(name: "First") do |sheet|
+      sheet.add_row ["name", "name", "note"]
+      sheet.add_row ["a", "b", "c"]
+    end
+    package.serialize(path)
+
+    output, = convert(path, "xlsx", "csv")
+    assert_equal "name,name_2,note\na,b,c\n", File.read(output)
+  end
 end

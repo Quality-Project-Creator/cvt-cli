@@ -246,6 +246,10 @@ module Cvt
           Gem::Specification.find_by_name(name)
         rescue StandardError
           nil
+        rescue LoadError
+          # Gem::MissingSpecError is a LoadError, not a StandardError: a
+          # missing native gem must be reported, never crash the diagnostic.
+          nil
         end
         {
           "name" => name,
