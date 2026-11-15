@@ -4,6 +4,7 @@ $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
 
 require "minitest/autorun"
 require "tmpdir"
+require "zip"
 require "cvt"
 
 class DetectorTest < Minitest::Test
@@ -164,6 +165,27 @@ class DetectorTest < Minitest::Test
       path = File.join(dir, "photo.JPEG")
       File.binwrite(path, "")
       assert_equal "jpg", @detector.detect(path).id
+    end
+  end
+
+  def test_deeply_nested_document_does_not_crash_detection
+    Dir.mktmpdir("cvt-nested") do |dir|
+      path = File.join(dir, "nested")
+      File.write(path, ("[" * 5_000) + ("]" * 5_000))
+      assert_nil @detector.detect(path).format
+    end
+  end
+
+  def test_zip_entry_is_read_within_a_bounded_size
+    Dir.mktmpdir("cvt-zip") do |dir|
+      path = File.join(dir, "book.zip")
+      Zip::File.open(path, create: true) do |zip|
+        zip.get_output_stream("mimetype") do |io|
+          io.write("application/epub+zip" + (" " * 5_000_000))
+        end
+      end
+      content = @detector.send(:read_zip_entry, path, "mimetype")
+      assert_operator content.length, :<=, Cvt::Detector::ZIP_ENTRY_READ_LIMIT
     end
   end
 end
