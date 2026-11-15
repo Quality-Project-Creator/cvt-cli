@@ -342,4 +342,19 @@ class DataTest < Minitest::Test
     refute output.start_with?("\uFEFF")
     assert_equal [{ "name" => "Widget", "qty" => "3" }], JSON.parse(output)
   end
+
+  def test_deeply_nested_yaml_reports_a_conversion_error
+    content = ("[" * 5_000) + ("]" * 5_000)
+    error = assert_conversion_error("yaml", "json", content)
+    assert_match(/nested too deeply/, error.message)
+  end
+
+  def test_duplicate_csv_headers_keep_every_column
+    json, = convert("csv", "json", "name,name,note\na,b,c\n")
+    record = JSON.parse(json).first
+    assert_equal %w[name name_2 note], record.keys
+    assert_equal "a", record["name"]
+    assert_equal "b", record["name_2"]
+    assert_equal "c", record["note"]
+  end
 end
