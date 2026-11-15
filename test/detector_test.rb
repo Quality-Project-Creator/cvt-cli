@@ -186,6 +186,10 @@ class DetectorTest < Minitest::Test
       end
       content = @detector.send(:read_zip_entry, path, "mimetype")
       assert_operator content.length, :<=, Cvt::Detector::ZIP_ENTRY_READ_LIMIT
+      # An entry stream left open keeps the archive locked, which stops
+      # Windows from deleting or replacing the file.
+      File.rename(path, File.join(dir, "moved.zip"))
+      assert File.exist?(File.join(dir, "moved.zip"))
     end
   end
 end

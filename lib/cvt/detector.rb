@@ -192,7 +192,9 @@ module Cvt
         entry = zip.find_entry(name)
         # Only the entry header is inspected (the EPUB mimetype), so the read
         # is capped: a small archive must not expand into gigabytes of RAM.
-        content = entry.get_input_stream.read(ZIP_ENTRY_READ_LIMIT) if entry
+        # The block form closes the entry stream: an open handle keeps the
+        # archive locked, which stops Windows from deleting or replacing it.
+        entry.get_input_stream { |io| content = io.read(ZIP_ENTRY_READ_LIMIT) } if entry
       end
       content
     rescue LoadError, StandardError
