@@ -36,7 +36,8 @@ module Cvt
       end
 
       def convert(input, output, options = {}, warnings = [])
-        Cvt::Adapters::Subtitle.convert(input, output, options["from"], options["to"], warnings)
+        Cvt::Adapters::Subtitle.convert(input, output, options["from"], options["to"], warnings,
+                                        options)
       rescue Cvt::Error
         raise
       rescue StandardError => e
