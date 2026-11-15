@@ -103,11 +103,10 @@ module Cvt
             "--headless",
             "--norestore",
             "--nofirststartwizard",
-            "-env:UserInstallation=#{user_installation_url(profile)}",
-            "--convert-to", spec,
-            "--outdir", outdir,
-            input
+            "-env:UserInstallation=#{user_installation_url(profile)}"
           ]
+          argv << csv_import_filter(from, options) if from.to_s == "csv"
+          argv.concat(["--convert-to", spec, "--outdir", outdir, input])
           result = Cvt::Shell.run(argv, timeout: timeout)
           raise timeout_error(timeout, result) if result.timed_out?
 
@@ -147,6 +146,19 @@ module Cvt
                   end
         filter = filters && filters[to]
         filter && "#{to}:#{filter}"
+      end
+
+      # LibreOffice reads CSV files with the separator of the current locale,
+      # so an explicit --delimiter has to be passed as an import filter. The
+      # token list is separator,text delimiter,charset,first line; the empty
+      # charset keeps LibreOffice's own encoding detection.
+      def csv_import_filter(from, options)
+        return nil unless from.to_s == "csv"
+
+        delimiter = options["delimiter"].to_s
+        return nil if delimiter.empty?
+
+        "--infilter=Text - txt - csv (StarCalc):#{delimiter[0].ord},34,,1"
       end
 
       def requirements_available?(requirements)
